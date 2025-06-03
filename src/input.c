@@ -239,6 +239,8 @@ static int wh_input_devices_init(WhaleCompositor* comp)
         &comp->listeners.new_input,
         on_new_input
     );
+
+    return 0;
 }
 
 static const struct xkb_rule_names xkb_rules = {
@@ -274,7 +276,7 @@ int keyrepeat(void* data)
     return 0;
 }
 
-static void on_keyboard_modifier(struct wl_listener* listener, void* data)
+static void on_keyboard_modifier(struct wl_listener* listener, void*)
 {
     WhaleCompositor* comp =
         wl_container_of(listener, comp, listeners.keyboard_modifier);
@@ -341,6 +343,8 @@ static int wh_input_keyboard_group_init(WhaleCompositor* comp)
     wlr_seat_set_keyboard(
         comp->seat, &comp->keyboard_group.wlr_keyboard_group->keyboard
     );
+
+    return 0;
 }
 
 static void on_request_set_cursor(struct wl_listener* listener, void* data)
