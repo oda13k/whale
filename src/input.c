@@ -20,6 +20,16 @@ static bool wh_input_is_client_focused(const WhaleClient* client)
            client->xdg_toplevel->base->surface;
 }
 
+/**
+ * Focus all inputs on the specified client, meaning the keyboard, 
+ * pointer.
+ * 
+ * @param enter_x X coord where the pointer entered the client
+ * @param enter_y Y coord where the pointer entered the client
+ * @param client The client that should receive focus.
+ * 
+ * @returns 0 on success or a negative value on failure.
+ */
 static int wh_input_focus_all_inputs_on_client(
     double enter_x, double enter_y, const WhaleClient* client
 )
