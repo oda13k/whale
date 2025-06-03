@@ -1,8 +1,10 @@
 
 #define _POSIX_C_SOURCE 200112L
 #define WLR_USE_UNSTABLE
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
 #include <wlr/backend.h>
@@ -48,6 +50,29 @@ static int wh_init_wl_interfaces(WhaleCompositor* comp)
     );
 
     return 0;
+}
+
+static int wh_spawn_process(const char* pathname)
+{
+    const pid_t pid = fork();
+    if (pid < 0)
+    {
+        wh_log(ERR, "Failed to spawn process %s", pathname);
+        return -1;
+    }
+
+    if (pid > 0)
+        return 0; // parent, ok.
+
+    /* child, close stdout, in and err on exec. */
+    fcntl(fileno(stdin), F_SETFD, FD_CLOEXEC);
+    fcntl(fileno(stdout), F_SETFD, FD_CLOEXEC);
+    fcntl(fileno(stderr), F_SETFD, FD_CLOEXEC);
+
+    char* const argv[] = {(char* const)pathname, NULL};
+    execv(pathname, argv);
+
+    exit(0);
 }
 
 int main(int, char**)
@@ -132,6 +157,8 @@ int main(int, char**)
 
     if (!wlr_backend_start(comp.backend))
         die("Failed to start wlr backend!");
+
+    wh_spawn_process("/bin/alacritty");
 
     wl_display_run(comp.display);
 

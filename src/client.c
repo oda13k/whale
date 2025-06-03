@@ -18,6 +18,11 @@ wh_client_from_xdg_toplevel(struct wlr_xdg_toplevel* toplevel)
     return toplevel->base->data;
 }
 
+static WhaleClient* wh_client_from_scene_node(const struct wlr_scene_node* node)
+{
+    return node->data;
+}
+
 static void wh_client_set_decorations_server_side(WhaleClient* client)
 {
     if (!client->xdg_toplevel->base->initialized)
@@ -30,16 +35,16 @@ static void wh_client_set_decorations_server_side(WhaleClient* client)
 
 static void wh_client_on_surface_map(struct wl_listener* listener, void*)
 {
-    wh_log(DEBUG, "client: map");
     WhaleClient* client = wl_container_of(listener, client, listeners.map);
-    wlr_scene_node_set_enabled(&client->scene_tree->node, true);
+
+    wlr_scene_node_set_enabled(&client->scene_tree->node, 1);
 }
 
 static void wh_client_on_surface_unmap(struct wl_listener* listener, void*)
 {
-    wh_log(DEBUG, "client: unmap");
     WhaleClient* client = wl_container_of(listener, client, listeners.unmap);
-    wlr_scene_node_set_enabled(&client->scene_tree->node, false);
+
+    wlr_scene_node_set_enabled(&client->scene_tree->node, 0);
 }
 
 static void wh_client_on_surface_commit(struct wl_listener* listener, void*)
@@ -50,13 +55,11 @@ static void wh_client_on_surface_commit(struct wl_listener* listener, void*)
 
     if (client->xdg_toplevel->base->initial_commit)
     {
-        /* Tell the client to pick it's own size */
-        wlr_scene_node_set_position(&client->scene_tree->node, 0, 0);
-        wlr_xdg_toplevel_set_size(client->xdg_toplevel, 0, 0);
-
         if (client->xdg_decoration)
             wh_client_set_decorations_server_side(client);
 
+        wlr_scene_node_set_position(&client->scene_tree->node, 0, 0);
+        wlr_xdg_toplevel_set_size(client->xdg_toplevel, 0, 0);
         return;
     }
 
@@ -91,8 +94,6 @@ static void wh_client_on_destroy(struct wl_listener* listener, void*)
     UNLISTEN(&client->listeners.set_title);
 
     free(client);
-
-    wh_log(DEBUG, "client: destroy");
 }
 
 static void wh_client_on_set_title(struct wl_listener* listener, void*)
@@ -111,9 +112,11 @@ void wh_client_on_new_client(struct wl_listener* listener, void* data)
     struct wlr_xdg_toplevel* toplevel = data;
 
     WhaleClient* client = calloc(1, sizeof(WhaleClient));
-    client->comp = comp;
     client->xdg_toplevel = toplevel;
-    toplevel->base->data = client;
+    /* The client can point back to the compositor */
+    client->comp = comp;
+    /* The xdg surface can point back to the client */
+    client->xdg_toplevel->base->data = client;
 
     /* Create a new scene-tree for this client containing it and it's
     sub-surfaces and add it to the root scene. */
@@ -190,4 +193,17 @@ void wh_client_on_new_xdg_decoration(struct wl_listener*, void* data)
         &client->listeners.decoration_destroy,
         on_decoration_destroy
     );
+}
+
+WhaleClient*
+wh_client_get_at_coords(wh_coord_t x, wh_coord_t y, const WhaleCompositor* comp)
+{
+    struct wlr_scene_node* node =
+        wlr_scene_node_at(&comp->root_scene->tree.node, x, y, NULL, NULL);
+
+    /* Not a client */
+    if (!node || node->type != WLR_SCENE_NODE_BUFFER)
+        return NULL;
+
+    return wh_client_from_scene_node(node);
 }

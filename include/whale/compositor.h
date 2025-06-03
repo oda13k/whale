@@ -66,7 +66,11 @@ typedef struct
         struct wl_listener cursor_axis;
         struct wl_listener cursor_frame;
 
+        struct wl_listener seat_request_set_cursor;
+        struct wl_listener seat_request_set_selection;
+
         struct wl_listener keyboard_key;
+        struct wl_listener keyboard_modifier;
 
         struct wl_listener new_input;
     } listeners;
