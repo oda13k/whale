@@ -80,7 +80,6 @@ static void on_cursor_motion_absolute(struct wl_listener* listener, void* data)
         wh_input_unfocus_all_inputs(comp);
         return;
     }
-    wh_log(DEBUG, "here");
 
     double surf_x = x - hovered_client->scene_tree->node.x;
     double surf_y = y - hovered_client->scene_tree->node.y;

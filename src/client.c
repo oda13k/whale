@@ -49,8 +49,6 @@ static void wh_client_on_surface_unmap(struct wl_listener* listener, void*)
 
 static void wh_client_on_surface_commit(struct wl_listener* listener, void*)
 {
-    wh_log(DEBUG, "client: commit");
-
     WhaleClient* client = wl_container_of(listener, client, listeners.commit);
 
     if (client->xdg_toplevel->base->initial_commit)

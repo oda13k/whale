@@ -20,8 +20,6 @@ static void on_monitor_frame(struct wl_listener* listener, void*)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     wlr_scene_output_send_frame_done(output->scene_output, &ts);
-
-    wh_log(DEBUG, "output: frame");
 }
 
 static void on_monitor_destroy(struct wl_listener*, void*)
