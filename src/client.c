@@ -102,6 +102,22 @@ static void wh_client_on_set_title(struct wl_listener* listener, void*)
     wh_log(DEBUG, "client: title \"%s\"", client->xdg_toplevel->title);
 }
 
+static void wh_tree_walk_and_set_client_data(struct wlr_scene_tree* tree, WhaleClient* client)
+{
+    tree->node.data = client;
+
+    struct wlr_scene_node* node;
+    wl_list_for_each(node, &tree->children, link)
+    {
+        if (!node)
+            continue;
+
+        node->data = client;
+        if (node->type == WLR_SCENE_NODE_TREE)
+            wh_tree_walk_and_set_client_data(wlr_scene_tree_from_node(node), client);
+    }
+}
+
 void wh_client_on_new_client(struct wl_listener* listener, void* data)
 {
     WhaleCompositor* comp =
@@ -120,6 +136,8 @@ void wh_client_on_new_client(struct wl_listener* listener, void* data)
     sub-surfaces and add it to the root scene. */
     client->scene_tree =
         wlr_scene_xdg_surface_create(&comp->root_scene->tree, toplevel->base);
+
+    wh_tree_walk_and_set_client_data(client->scene_tree, client);
 
     LISTEN(
         &toplevel->base->surface->events.map,
