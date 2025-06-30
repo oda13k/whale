@@ -13,13 +13,20 @@ WAYLAND_SCANNER       = $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland
 
 PKG_CONFIG_PKGS       = wayland-server wlroots-0.19 xkbcommon
 
-CFLAGS    := -MD -MP -Wall -Wextra -Wimplicit-function-declaration -std=c23 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) -fdiagnostics-color=always
+CFLAGS    := -MD -MP -Wall -Wextra -Wimplicit-function-declaration -std=c23 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) -fdiagnostics-color=always -D_POSIX_C_SOURCE=200809L
 LDFLAGS   := 
+
+BROKEN_CODE_C23_LSP := 1
+ifeq ($(BROKEN_CODE_C23_LSP),1)
+	CFLAGS += -Dtrue=1 -Dfalse=0
+endif
 
 CFLAGS    += $(shell ${PKG_CONFIG} --cflags ${PKG_CONFIG_PKGS}) 
 LDFLAGS   += $(shell ${PKG_CONFIG} --libs ${PKG_CONFIG_PKGS})
 
-SRC       := src/main.c src/compositor.c src/output.c src/log.c src/client.c src/input.c
+SRC       := src/main.c src/output.c src/log.c src/vector.c \
+src/client.c src/input.c src/input/keyboard.c src/utils.c src/client/xdg_shell.c
+
 OBJS      := $(addprefix $(BUILD_DIR)/, $(SRC:%.c=%.c.o))
 DEPS      := $(OBJS:%.o=%.d)
 

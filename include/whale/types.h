@@ -2,7 +2,7 @@
 #ifndef _WHALE_TYPES_H
 #define _WHALE_TYPES_H
 
-#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef uint8_t u8;
@@ -14,6 +14,23 @@ typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
+
+typedef double wh_coord_t;
+
+typedef struct
+{
+    wh_coord_t x;
+    wh_coord_t y;
+} wh_pos2d_t;
+
+#define WH_SIZE_UNDEFINED 0
+typedef u32 wh_size_t;
+
+typedef struct
+{
+    wh_size_t w;
+    wh_size_t h;
+} wh_size2d_t;
 
 #define LISTEN(signal, listener, cb)                                           \
     wl_signal_add(signal, ((listener)->notify = cb, listener))

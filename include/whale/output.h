@@ -1,13 +1,20 @@
 
-#ifndef _WHALE_OUTPUT_H
-#define _WHALE_OUTPUT_H
+#ifndef WHALE_OUTPUT_H
+#define WHALE_OUTPUT_H
 
-#include <wayland-server-core.h>
 #define WLR_USE_UNSTABLE
+#include <wayland-server-core.h>
+#include <whale/types.h>
+#include <whale/vector.h>
 #include <wlr/types/wlr_scene.h>
+
+struct WhaleCompositor;
+struct whale_client_t;
 
 typedef struct
 {
+    WhaleCompositor* comp;
+
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
 
@@ -16,10 +23,17 @@ typedef struct
     struct wl_listener listener_request_state;
 
     struct wl_list link;
+
+    // VEC(struct whale_client_t*) clients;
 } WhaleOutput;
 
-void wh_output_on_new_output(struct wl_listener* listener, void* data);
+int wh_output_subsystem_init(WhaleCompositor* comp);
 
-void wh_output_layout_on_change(struct wl_listener* listener, void* data);
+WhaleOutput*
+wh_output_get_at(wh_coord_t x, wh_coord_t y, WhaleCompositor* comp);
 
-#endif // _WHALE_OUTPUT_H
+WhaleOutput* wh_output_get_default(WhaleCompositor* comp);
+
+struct wlr_box wh_output_get_geometry(WhaleOutput* output);
+
+#endif // WHALE_OUTPUT_H

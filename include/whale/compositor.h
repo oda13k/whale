@@ -37,13 +37,7 @@ typedef struct
 
     struct wlr_output_layout* output_layout;
 
-    /* List of clients */
-    struct wl_list clients;
-
     struct wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
-
-    /* Order of focused clients */
-    // struct wl_list focus_order;
 
     struct wlr_cursor* cursor;
     struct wlr_xcursor_manager* cursor_manager;

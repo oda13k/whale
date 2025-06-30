@@ -1,214 +1,184 @@
 
 #define WLR_USE_UNSTABLE
+#include <signal.h>
 #include <stdlib.h>
-#include <whale/client.h>
+#include <whale/client/client.h>
+#include <whale/client/xdg_shell.h>
 #include <whale/compositor.h>
+#include <whale/input.h>
 #include <whale/log.h>
 #include <whale/types.h>
-#include <wlr/types/wlr_xdg_shell.h>
-
-static struct wlr_box* wh_client_get_geometry(WhaleClient* client)
-{
-    return &client->xdg_toplevel->base->geometry;
-}
-
-static WhaleClient*
-wh_client_from_xdg_toplevel(struct wlr_xdg_toplevel* toplevel)
-{
-    return toplevel->base->data;
-}
+#include <whale/utils.h>
+#include <wlr/types/wlr_server_decoration.h>
 
 static WhaleClient* wh_client_from_scene_node(const struct wlr_scene_node* node)
 {
     return node->data;
 }
 
-static void wh_client_set_decorations_server_side(WhaleClient* client)
+static void wh_client_arrange_floating(WhaleClient* client)
 {
-    if (!client->xdg_toplevel->base->initialized)
+    if (!client->bound_output)
         return;
 
-    wlr_xdg_toplevel_decoration_v1_set_mode(
-        client->xdg_decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
-    );
-}
-
-static void wh_client_on_surface_map(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = wl_container_of(listener, client, listeners.map);
-
-    wlr_scene_node_set_enabled(&client->scene_tree->node, 1);
-}
-
-static void wh_client_on_surface_unmap(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = wl_container_of(listener, client, listeners.unmap);
-
-    wlr_scene_node_set_enabled(&client->scene_tree->node, 0);
-}
-
-static void wh_client_on_surface_commit(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = wl_container_of(listener, client, listeners.commit);
-
-    if (client->xdg_toplevel->base->initial_commit)
+    struct wlr_box bound_geom;
+    if (wh_client_has_parent(client))
     {
-        if (client->xdg_decoration)
-            wh_client_set_decorations_server_side(client);
+        /* If the client has a parent, we position it center
+        relative to it's parent. */
+        bound_geom = *wh_client_get_geometry(wh_client_get_parent(client));
+    }
+    else
+    {
+        /* If the client has no parent, we position it center
+        relative to the output. */
+        bound_geom = wh_output_get_geometry(client->bound_output);
+    }
 
-        wlr_scene_node_set_position(&client->scene_tree->node, 0, 0);
-        wlr_xdg_toplevel_set_size(client->xdg_toplevel, 0, 0);
+    wh_pos2d_t client_pos = wh_client_get_pos(client);
+    wh_size2d_t client_size = wh_client_get_size(client);
+
+    wh_coord_t target_x =
+        (bound_geom.x + bound_geom.width) / 2 - (client_size.w / 2);
+    wh_coord_t target_y =
+        (bound_geom.y + bound_geom.height) / 2 - (client_size.h / 2);
+
+    if (client_pos.x != target_x || client_pos.y != target_y)
+        wh_client_set_pos(target_x, target_y, client);
+}
+
+static float g_split_factor = 0.5;
+
+static void wh_client_arrange_tiled(
+    WhaleClient* client, size_t tile_order, size_t tiled_clients_on_output
+)
+{
+    if (!client->bound_output)
         return;
-    }
 
-    struct wlr_box* geom = wh_client_get_geometry(client);
-    /* the client's geometry includes whatever decorations the client has.
-    We turn decorations off, but clients still position themselves as if they
-    had decorations. */
-    wlr_scene_node_set_position(&client->scene_tree->node, geom->x, geom->y);
+    struct wlr_box bounds = wh_output_get_geometry(client->bound_output);
 
-    struct wlr_output* output = wlr_output_layout_output_at(
-        client->comp->output_layout, geom->x, geom->y
+    bool trig = (tile_order >= 1 && tiled_clients_on_output >= 3);
+
+    wh_coord_t w =
+        (bounds.width * ((tile_order == 0 && tiled_clients_on_output == 1) +
+                         (tiled_clients_on_output > 1) * g_split_factor));
+
+    wh_coord_t x = bounds.x + (tile_order > 0) * w;
+
+    wh_coord_t h = bounds.height / (1 + trig * (tiled_clients_on_output - 2));
+    wh_coord_t y = bounds.y + trig * h * (tile_order - 1);
+
+    wh_pos2d_t client_pos = wh_client_get_pos(client);
+    if (client_pos.x != x || client_pos.y != y)
+        wh_client_set_pos(x, y, client);
+
+    wh_size2d_t client_size = wh_client_get_size(client);
+    if (client_size.w != w || client_size.h != h)
+        wh_client_set_size(w, h, client);
+}
+
+void wh_client_arrange_clients_on_output(WhaleOutput* output)
+{
+    // WhaleClient* client;
+    // size_t tiled_clients_on_output = 0;
+    // wl_list_for_each(client, &output->clients, output_link)
+    //     tiled_clients_on_output +=
+    //     (client->arrangement == ARRANGE_TILED &&
+    //     wh_client_is_mapped(client));
+
+    // VEC_FOR_EACH(output->clients, client)
+    // {
+
+    // }
+    // size_t i = 0;
+    // wl_list_for_each(client, &output->clients, output_link)
+    // {
+    //     if (!wh_client_is_mapped(client))
+    //         continue;
+
+    //     switch (client->arrangement)
+    //     {
+    //     case ARRANGE_TILED:
+    //         wh_client_arrange_tiled(client, i++, tiled_clients_on_output);
+    //         break;
+
+    //     case ARRANGE_FLOATING:
+    //         wh_client_arrange_floating(client);
+    //         break;
+
+    //     default:
+    //         unreachable();
+    //     }
+    // }
+}
+
+int wh_client_subsystem_init(WhaleCompositor* comp)
+{
+    /* This protocol is obsolete, but untill it is removed,
+    we'll support it. */
+    wlr_server_decoration_manager_set_default_mode(
+        wlr_server_decoration_manager_create(comp->display),
+        WLR_SERVER_DECORATION_MANAGER_MODE_SERVER
     );
 
-    if (geom->width != output->width || geom->height != output->height)
+    wh_client_xdg_shell_init(comp);
+
+    return 0;
+}
+
+void wh_client_ss_destroy(WhaleCompositor* comp)
+{
+    wh_client_xdg_shell_destroy(comp);
+}
+
+int wh_client_refresh_bounds(WhaleClient* client)
+{
+    WhaleCompositor* comp = client->comp;
+
+    if (!client->bound_output)
     {
-        wlr_xdg_toplevel_set_size(
-            client->xdg_toplevel, output->width, output->height
-        );
+        /* This is either the first bound set, or we had (maybe still have) no
+         outputs connected. Either way we'll try to make the output under the
+         cursor the bounding output. */
+        client->bound_output =
+            wh_output_get_at(comp->cursor->x, comp->cursor->y, comp);
+
+        if (!client->bound_output)
+            client->bound_output = wh_output_get_default(comp);
+
+        if (client->bound_output)
+        {
+            // wl_list_insert(
+            //     &client->bound_output->clients, &client->output_link
+            // );
+        }
     }
+
+    return 0;
 }
 
-static void wh_client_on_destroy(struct wl_listener* listener, void*)
+int wh_client_refresh_all_client_bounds(WhaleCompositor*)
 {
-    WhaleClient* client = wl_container_of(listener, client, listeners.destroy);
+    // WhaleClient* client;
+    // wl_list_for_each(client, &comp->clients, clients_link)
+    // {
+    //     wh_client_refresh_bounds(client);
+    //     wh_client_arrange(client);
+    // }
 
-    wlr_scene_node_destroy(&client->scene_tree->node);
-
-    UNLISTEN(&client->listeners.map);
-    UNLISTEN(&client->listeners.unmap);
-    UNLISTEN(&client->listeners.commit);
-    UNLISTEN(&client->listeners.destroy);
-    UNLISTEN(&client->listeners.set_title);
-
-    free(client);
+    return 0;
 }
 
-static void wh_client_on_set_title(struct wl_listener* listener, void*)
+void wh_client_set_pos(wh_coord_t x, wh_coord_t y, WhaleClient* client)
 {
-    WhaleClient* client =
-        wl_container_of(listener, client, listeners.set_title);
-
-    wh_log(DEBUG, "client: title \"%s\"", client->xdg_toplevel->title);
+    wlr_scene_node_set_position(&client->scene_tree->node, x, y);
 }
 
-static void wh_tree_walk_and_set_client_data(struct wlr_scene_tree* tree, WhaleClient* client)
+wh_pos2d_t wh_client_get_pos(WhaleClient* client)
 {
-    tree->node.data = client;
-
-    struct wlr_scene_node* node;
-    wl_list_for_each(node, &tree->children, link)
-    {
-        if (!node)
-            continue;
-
-        node->data = client;
-        if (node->type == WLR_SCENE_NODE_TREE)
-            wh_tree_walk_and_set_client_data(wlr_scene_tree_from_node(node), client);
-    }
-}
-
-void wh_client_on_new_client(struct wl_listener* listener, void* data)
-{
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.xdg_new_toplevel);
-
-    struct wlr_xdg_toplevel* toplevel = data;
-
-    WhaleClient* client = calloc(1, sizeof(WhaleClient));
-    client->xdg_toplevel = toplevel;
-    /* The client can point back to the compositor */
-    client->comp = comp;
-    /* The xdg surface can point back to the client */
-    client->xdg_toplevel->base->data = client;
-
-    /* Create a new scene-tree for this client containing it and it's
-    sub-surfaces and add it to the root scene. */
-    client->scene_tree =
-        wlr_scene_xdg_surface_create(&comp->root_scene->tree, toplevel->base);
-
-    wh_tree_walk_and_set_client_data(client->scene_tree, client);
-
-    LISTEN(
-        &toplevel->base->surface->events.map,
-        &client->listeners.map,
-        wh_client_on_surface_map
-    );
-
-    LISTEN(
-        &toplevel->base->surface->events.unmap,
-        &client->listeners.unmap,
-        wh_client_on_surface_unmap
-    );
-
-    LISTEN(
-        &toplevel->base->surface->events.commit,
-        &client->listeners.commit,
-        wh_client_on_surface_commit
-    );
-
-    LISTEN(
-        &toplevel->events.destroy,
-        &client->listeners.destroy,
-        wh_client_on_destroy
-    );
-
-    LISTEN(
-        &toplevel->events.set_title,
-        &client->listeners.set_title,
-        wh_client_on_set_title
-    );
-
-    wh_log(DEBUG, "client: new");
-}
-
-static void on_decoration_request_mode(struct wl_listener* listener, void*)
-{
-    WhaleClient* client =
-        wl_container_of(listener, client, listeners.decoration_request_mode);
-
-    /* Ignore requested decoration modes, turn them off instead. */
-    wh_client_set_decorations_server_side(client);
-}
-
-static void on_decoration_destroy(struct wl_listener* listener, void*)
-{
-    WhaleClient* client =
-        wl_container_of(listener, client, listeners.decoration_destroy);
-
-    wl_list_remove(&client->listeners.decoration_destroy.link);
-    wl_list_remove(&client->listeners.decoration_request_mode.link);
-    client->xdg_decoration = NULL;
-}
-
-void wh_client_on_new_xdg_decoration(struct wl_listener*, void* data)
-{
-    struct wlr_xdg_toplevel_decoration_v1* decoration = data;
-    WhaleClient* client = wh_client_from_xdg_toplevel(decoration->toplevel);
-
-    client->xdg_decoration = decoration;
-
-    LISTEN(
-        &decoration->events.request_mode,
-        &client->listeners.decoration_request_mode,
-        on_decoration_request_mode
-    );
-
-    LISTEN(
-        &decoration->events.destroy,
-        &client->listeners.decoration_destroy,
-        on_decoration_destroy
-    );
+    return (wh_pos2d_t){.x = client->scene_tree->node.x,
+                        .y = client->scene_tree->node.y};
 }
 
 WhaleClient*
@@ -222,4 +192,20 @@ wh_client_get_at_coords(wh_coord_t x, wh_coord_t y, const WhaleCompositor* comp)
         return NULL;
 
     return wh_client_from_scene_node(node);
+}
+
+bool wh_client_is_mapped(const WhaleClient* client)
+{
+    return client->scene_tree->node.enabled;
+}
+
+WhaleClient* wh_client_from_wlr_surface(struct wlr_surface* surface)
+{
+    return surface->data;
+}
+
+int wh_client_sigterm(WhaleClient* client)
+{
+    wlr_xdg_toplevel_send_close(client->xdg_toplevel);
+    return 0;
 }
