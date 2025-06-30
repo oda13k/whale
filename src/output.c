@@ -28,6 +28,8 @@ static void on_output_destroy(struct wl_listener* listener, void*)
 
     wl_list_remove(&output->link);
 
+    // FIXME: destroy/move bound clients
+
     wlr_output_layout_remove(output->comp->output_layout, output->wlr_output);
     wlr_scene_output_destroy(output->scene_output);
 
@@ -113,6 +115,8 @@ static void on_output_new(struct wl_listener* listener, void* data)
     output->wlr_output = wlr_output;
     output->comp = comp;
     wlr_output->data = output;
+    
+    VEC_INIT_SIZED(4, &output->clients);
 
     /* Set the output's event listeners */
     LISTEN(&wlr_output->events.frame, &output->listener_frame, on_output_frame);

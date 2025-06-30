@@ -80,37 +80,32 @@ static void wh_client_arrange_tiled(
 
 void wh_client_arrange_clients_on_output(WhaleOutput* output)
 {
-    // WhaleClient* client;
-    // size_t tiled_clients_on_output = 0;
-    // wl_list_for_each(client, &output->clients, output_link)
-    //     tiled_clients_on_output +=
-    //     (client->arrangement == ARRANGE_TILED &&
-    //     wh_client_is_mapped(client));
+    size_t tiled_clients_on_output = 0;
+    VEC_FOR_EACH(client, &output->clients)
+        tiled_clients_on_output +=
+        ((*client)->arrangement == ARRANGE_TILED &&
+        wh_client_is_mapped(*client));
 
-    // VEC_FOR_EACH(output->clients, client)
-    // {
+    size_t i = 0;
+    VEC_FOR_EACH(client, &output->clients)
+    {
+        if (!wh_client_is_mapped(*client))
+            continue;
 
-    // }
-    // size_t i = 0;
-    // wl_list_for_each(client, &output->clients, output_link)
-    // {
-    //     if (!wh_client_is_mapped(client))
-    //         continue;
+        switch ((*client)->arrangement)
+        {
+        case ARRANGE_TILED:
+            wh_client_arrange_tiled(*client, i++, tiled_clients_on_output);
+            break;
 
-    //     switch (client->arrangement)
-    //     {
-    //     case ARRANGE_TILED:
-    //         wh_client_arrange_tiled(client, i++, tiled_clients_on_output);
-    //         break;
+        case ARRANGE_FLOATING:
+            wh_client_arrange_floating(*client);
+            break;
 
-    //     case ARRANGE_FLOATING:
-    //         wh_client_arrange_floating(client);
-    //         break;
-
-    //     default:
-    //         unreachable();
-    //     }
-    // }
+        default:
+            unreachable();
+        }
+    }
 }
 
 int wh_client_subsystem_init(WhaleCompositor* comp)
@@ -148,11 +143,7 @@ int wh_client_refresh_bounds(WhaleClient* client)
             client->bound_output = wh_output_get_default(comp);
 
         if (client->bound_output)
-        {
-            // wl_list_insert(
-            //     &client->bound_output->clients, &client->output_link
-            // );
-        }
+            VEC_PUSH(client, &client->bound_output->clients);
     }
 
     return 0;

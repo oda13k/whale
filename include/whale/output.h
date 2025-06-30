@@ -24,7 +24,7 @@ typedef struct
 
     struct wl_list link;
 
-    // VEC(struct whale_client_t*) clients;
+    VEC(struct whale_client_t*) clients;
 } WhaleOutput;
 
 int wh_output_subsystem_init(WhaleCompositor* comp);

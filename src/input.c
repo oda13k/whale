@@ -206,7 +206,7 @@ static void on_new_input(struct wl_listener* listener, void* data)
             seat_caps |= WL_SEAT_CAPABILITY_POINTER;
 
         break;
-
+        
     case WLR_INPUT_DEVICE_KEYBOARD:
         struct wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(dev);
         if (wh_input_keyboard_add(wlr_keyboard, comp) == 0)

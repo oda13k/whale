@@ -125,7 +125,7 @@ static void on_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
     WhaleClient* client = wl_container_of(listener, client, listeners.destroy);
 
-    // wl_list_remove(&client->output_link);
+    VEC_REMOVE(client, &client->bound_output->clients);
 
     wlr_scene_node_destroy(&client->scene_tree->node);
     client->scene_tree = nullptr;
