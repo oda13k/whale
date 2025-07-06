@@ -152,6 +152,7 @@ ForEachMacros:
   - 'FOR_EACH_SINK_OF_TYPE'
   - 'FOR_EACH_DRIVER_BLKDEV'
   - 'FOR_EACH_PAGE'
+  - 'VEC_FOR_EACH'
 
 TabWidth:        4
 UseCRLF:         false
