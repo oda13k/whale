@@ -10,15 +10,11 @@
 
 static WhaleCompositor* g_comp;
 
-static void on_cursor_motion(struct wl_listener*, void*)
-{
-    wh_log(DEBUG, "cursor: motion");
-}
+static WhaleClient* g_focused_client;
 
 static bool wh_input_is_client_focused(const WhaleClient* client)
 {
-    return client->comp->seat->keyboard_state.focused_surface ==
-           client->xdg_toplevel->base->surface;
+    return g_focused_client == client;
 }
 
 /**
@@ -31,16 +27,17 @@ static bool wh_input_is_client_focused(const WhaleClient* client)
  *
  * @returns 0 on success or a negative value on failure.
  */
-static int wh_input_focus_all_inputs_on_client(
-    double enter_x, double enter_y, const WhaleClient* client
-)
+static int
+wh_input_focus_client(double enter_x, double enter_y, WhaleClient* client)
 {
-    WhaleCompositor* comp = client->comp;
-    struct wlr_seat* seat = comp->seat;
-    struct wlr_surface* surf = client->xdg_toplevel->base->surface;
+    if (wh_input_is_client_focused(client))
+        return 0;
+
+    struct wlr_seat* seat = g_comp->seat;
+    struct wlr_surface* surf = wh_client_get_wlr_surface(client);
 
     struct wlr_keyboard* keyboard =
-        &comp->keyboard_group.wlr_keyboard_group->keyboard;
+        &g_comp->keyboard_group.wlr_keyboard_group->keyboard;
 
     wlr_seat_keyboard_notify_enter(
         seat,
@@ -49,74 +46,89 @@ static int wh_input_focus_all_inputs_on_client(
         keyboard->num_keycodes,
         &keyboard->modifiers
     );
-
     wlr_seat_pointer_notify_enter(seat, surf, enter_x, enter_y);
+    g_focused_client = client;
 
     return 0;
 }
 
-static int wh_input_unfocus_all_inputs(const WhaleCompositor* comp)
+static int wh_input_unfocus()
 {
-    struct wlr_seat* seat = comp->seat;
-    if (seat->keyboard_state.focused_surface)
+    if (g_focused_client)
     {
-        wlr_seat_keyboard_notify_clear_focus(seat);
-        wlr_seat_pointer_notify_clear_focus(seat);
+        wlr_seat_pointer_notify_clear_focus(g_comp->seat);
+        wlr_seat_keyboard_notify_clear_focus(g_comp->seat);
+        g_focused_client = nullptr;
     }
 
     return 0;
 }
 
-static void on_cursor_motion_absolute(struct wl_listener* listener, void* data)
+static void on_cursor_motion(struct wl_listener*, void* data)
 {
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.cursor_motion_absolute);
+    struct wlr_pointer_motion_event* ev = data;
+    struct wlr_cursor* cursor = g_comp->cursor;
 
-    struct wlr_pointer_motion_absolute_event* ev = data;
+    /* Move the cursor to the same position */
+    wlr_cursor_move(cursor, &ev->pointer->base, ev->delta_x, ev->delta_y);
 
-    double x;
-    double y;
-    wlr_cursor_absolute_to_layout_coords(
-        comp->cursor, &ev->pointer->base, ev->x, ev->y, &x, &y
-    );
-
-    /* Set the cursor to the same position */
-    wlr_cursor_warp(comp->cursor, &ev->pointer->base, x, y);
-
-    double surf_x, surf_y;
-    /* The focus follows the cursor. */
-    int st = wh_input_refocus_all_inputs_on_topmost_client_under_cursor(
-        comp, &surf_x, &surf_y
-    );
-
-    if (st == 0)
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleClient* client = wh_input_focus_client_under(&cursor_pos);
+    if (client)
     {
+        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+        wh_pos2d_t client_coords;
+        wh_client_layout_to_client_coords(client, &cursor_pos, &client_coords);
+
         wlr_seat_pointer_notify_motion(
-            comp->seat, wh_time_monotonic_now_ms(), surf_x, surf_y
+            g_comp->seat,
+            wh_time_monotonic_now_ms(),
+            client_coords.x,
+            client_coords.y
         );
     }
 }
 
-static void on_cursor_button(struct wl_listener* listener, void* data)
+static void on_cursor_motion_absolute(struct wl_listener*, void* data)
 {
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.cursor_button);
+    struct wlr_pointer_motion_absolute_event* ev = data;
+    struct wlr_cursor* cursor = g_comp->cursor;
+
+    /* Set the cursor to the same position */
+    wlr_cursor_warp_absolute(cursor, &ev->pointer->base, ev->x, ev->y);
+
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleClient* client = wh_input_focus_client_under(&cursor_pos);
+    if (client)
+    {
+        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+        wh_pos2d_t client_coords;
+        wh_client_layout_to_client_coords(client, &cursor_pos, &client_coords);
+
+        wlr_seat_pointer_notify_motion(
+            g_comp->seat,
+            wh_time_monotonic_now_ms(),
+            client_coords.x,
+            client_coords.y
+        );
+    }
+}
+
+static void on_cursor_button(struct wl_listener*, void* data)
+{
     struct wlr_pointer_button_event* ev = data;
 
     wlr_seat_pointer_notify_button(
-        comp->seat, ev->time_msec, ev->button, ev->state
+        g_comp->seat, ev->time_msec, ev->button, ev->state
     );
 }
 
-static void on_cursor_axis(struct wl_listener* listener, void* data)
+static void on_cursor_axis(struct wl_listener*, void* data)
 {
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.cursor_axis);
-
     struct wlr_pointer_axis_event* ev = data;
 
     wlr_seat_pointer_notify_axis(
-        comp->seat,
+        g_comp->seat,
         ev->time_msec,
         ev->orientation,
         ev->delta,
@@ -126,13 +138,10 @@ static void on_cursor_axis(struct wl_listener* listener, void* data)
     );
 }
 
-static void on_cursor_frame(struct wl_listener* listener, void*)
+static void on_cursor_frame(struct wl_listener*, void*)
 {
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.cursor_frame);
-
     /* Notify the focused client. */
-    wlr_seat_pointer_notify_frame(comp->seat);
+    wlr_seat_pointer_notify_frame(g_comp->seat);
 }
 
 static int wh_input_cursor_init(WhaleCompositor* comp)
@@ -194,7 +203,7 @@ static void on_new_input(struct wl_listener* listener, void* data)
     WhaleCompositor* comp =
         wl_container_of(listener, comp, listeners.new_input);
     struct wlr_input_device* dev = data;
-    wh_log(DEBUG, "input: new input (%s)", dev->name);
+    wh_log(INFO, "input: new input (%s)", dev->name);
 
     u32 seat_caps = comp->seat->capabilities;
 
@@ -206,7 +215,7 @@ static void on_new_input(struct wl_listener* listener, void* data)
             seat_caps |= WL_SEAT_CAPABILITY_POINTER;
 
         break;
-        
+
     case WLR_INPUT_DEVICE_KEYBOARD:
         struct wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(dev);
         if (wh_input_keyboard_add(wlr_keyboard, comp) == 0)
@@ -274,56 +283,34 @@ int wh_input_init(WhaleCompositor* comp)
     return 0;
 }
 
-int wh_input_refocus_all_inputs_on_topmost_client_under_cursor(
-    WhaleCompositor* comp, double* focused_surface_x, double* focused_surface_y
-)
+WhaleClient* wh_input_focus_client_under(const wh_pos2d_t* pos)
 {
-    struct wlr_cursor* curs = comp->cursor;
     /* Get the top-most node over which our cursor is currently hovering. */
     WhaleClient* hovered_client =
-        wh_client_get_at_coords(curs->x, curs->y, comp);
+        wh_client_get_at_coords(pos->x, pos->y, g_comp);
 
     if (!hovered_client)
     {
         /* This needs to be re-set every time in order to show up on screen
         (?)
          */
-        wlr_cursor_set_xcursor(comp->cursor, comp->cursor_manager, "default");
-        wh_input_unfocus_all_inputs(comp);
-        return 1;
+        wlr_cursor_set_xcursor(
+            g_comp->cursor, g_comp->cursor_manager, "default"
+        );
+        wh_input_unfocus();
+        return nullptr;
     }
 
-    double surf_x = curs->x - (hovered_client->scene_tree->node.x -
-                               hovered_client->xdg_toplevel->base->geometry.x);
-    double surf_y = curs->y - (hovered_client->scene_tree->node.y -
-                               hovered_client->xdg_toplevel->base->geometry.y);
-
-    if (focused_surface_x)
-        *focused_surface_x = surf_x;
-
-    if (focused_surface_y)
-        *focused_surface_y = surf_y;
-
-    if (!wh_input_is_client_focused(hovered_client))
-        wh_input_focus_all_inputs_on_client(surf_x, surf_y, hovered_client);
-
-    return 0;
-}
-
-int wh_input_focus_on_client(WhaleClient* client)
-{
-    if (!wh_input_is_client_focused(client))
-        wh_input_focus_all_inputs_on_client(0, 0, client);
-
-    return 0;
+    wh_input_focus_client(pos->x, pos->y, hovered_client);
+    return hovered_client;
 }
 
 WhaleClient* wh_input_get_focused_client()
 {
-    if (g_comp->seat->keyboard_state.focused_surface)
-        return wh_client_from_wlr_surface(
-            g_comp->seat->keyboard_state.focused_surface
-        );
+    return g_focused_client;
+}
 
-    return nullptr;
+wh_pos2d_t wh_input_get_cursor_pos()
+{
+    return (wh_pos2d_t){.x = g_comp->cursor->x, .y = g_comp->cursor->y};
 }

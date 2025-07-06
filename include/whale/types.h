@@ -32,6 +32,15 @@ typedef struct
     wh_size_t h;
 } wh_size2d_t;
 
+typedef struct
+{
+    wh_coord_t x;
+    wh_coord_t y;
+
+    wh_size_t w;
+    wh_size_t h;
+} WhaleGeometry2D;
+
 #define LISTEN(signal, listener, cb)                                           \
     wl_signal_add(signal, ((listener)->notify = cb, listener))
 

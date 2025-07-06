@@ -26,7 +26,7 @@ static void on_output_destroy(struct wl_listener* listener, void*)
 {
     WhaleOutput* output = wl_container_of(listener, output, listener_destroy);
 
-    wl_list_remove(&output->link);
+    VEC_REMOVE(output, &output->comp->outputs);
 
     // FIXME: destroy/move bound clients
 
@@ -44,15 +44,16 @@ static void on_output_destroy(struct wl_listener* listener, void*)
 static void on_output_request_state(struct wl_listener*, void* data)
 {
     /* The monitor is asking us that it wants this state */
-    struct wlr_output_event_request_state* event = data;
-    wlr_output_commit_state(event->output, event->state);
+    struct wlr_output_event_request_state* ev = data;
+    wlr_output_commit_state(ev->output, ev->state);
 
     wh_log(
         DEBUG,
-        "output (%s) @ %dx%d",
-        event->output->name,
-        event->output->width,
-        event->output->height
+        "output: (%s) requested mode %dx%d @ %.2fHz",
+        ev->output->name,
+        ev->output->width,
+        ev->output->height,
+        ev->output->refresh / 1000.f
     );
 }
 
@@ -86,8 +87,29 @@ static int wh_output_configure(WhaleOutput* output)
     if (st < 0)
         return st;
 
+    WhaleCompositor* comp = output->comp;
+
+    struct wlr_box layout_bounds;
+    wlr_output_layout_get_box(comp->output_layout, nullptr, &layout_bounds);
+
     /* Add the output to the output-layout, from left to right. */
-    wlr_output_layout_add_auto(output->comp->output_layout, output->wlr_output);
+    wh_coord_t mon_x = layout_bounds.width;
+    wh_coord_t mon_y = 0;
+    wlr_output_layout_add(
+        comp->output_layout, output->wlr_output, mon_x, mon_y
+    );
+    wlr_scene_output_set_position(output->scene_output, mon_x, mon_y);
+
+    wh_log(
+        INFO,
+        "output: (%s) %dx%d @ %.2fHz positioned at %.0fx%.0f",
+        output->wlr_output->name,
+        output->wlr_output->width,
+        output->wlr_output->height,
+        output->wlr_output->refresh / 1000.f,
+        mon_x,
+        mon_y
+    );
 
     return 0;
 }
@@ -115,8 +137,8 @@ static void on_output_new(struct wl_listener* listener, void* data)
     output->wlr_output = wlr_output;
     output->comp = comp;
     wlr_output->data = output;
-    
-    VEC_INIT_SIZED(4, &output->clients);
+
+    VEC_INIT(&output->clients);
 
     /* Set the output's event listeners */
     LISTEN(&wlr_output->events.frame, &output->listener_frame, on_output_frame);
@@ -131,14 +153,14 @@ static void on_output_new(struct wl_listener* listener, void* data)
         on_output_request_state
     );
 
-    wh_output_configure(output);
-
     /* Add this output's viewport to the main scene-graph. */
     output->scene_output =
         wlr_scene_output_create(comp->root_scene, wlr_output);
 
+    wh_output_configure(output);
+
     /* Keep track of this output */
-    wl_list_insert(&comp->outputs, &output->link);
+    VEC_PUSH(output, &comp->outputs);
 }
 
 static void on_output_layout_change(struct wl_listener* listener, void*)
@@ -146,7 +168,8 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
     WhaleCompositor* comp =
         wl_container_of(listener, comp, listeners.output_layout_change);
 
-    wh_client_refresh_all_client_bounds(comp);
+    VEC_FOR_EACH (output, &comp->outputs)
+        wh_client_arrange_clients_on_output(*output);
 
     struct wlr_box scene_geom;
     wlr_output_layout_get_box(comp->output_layout, NULL, &scene_geom);
@@ -160,7 +183,7 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
     );
 }
 
-int wh_output_subsystem_init(WhaleCompositor* comp)
+int wh_output_ss_init(WhaleCompositor* comp)
 {
     comp->root_scene = wlr_scene_create();
 
@@ -178,7 +201,7 @@ int wh_output_subsystem_init(WhaleCompositor* comp)
     );
 
     /* List keeping track of all monitors */
-    wl_list_init(&comp->outputs);
+    VEC_INIT(&comp->outputs);
     LISTEN(
         &comp->backend->events.new_output,
         &comp->listeners.new_output,
@@ -206,11 +229,13 @@ WhaleOutput* wh_output_get_default(WhaleCompositor* comp)
     );
 }
 
-struct wlr_box wh_output_get_geometry(WhaleOutput* output)
+WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output)
 {
     struct wlr_box geom;
     wlr_output_layout_get_box(
         output->comp->output_layout, output->wlr_output, &geom
     );
-    return geom;
+    return (WhaleGeometry2D){
+        .x = geom.x, .y = geom.y, .w = geom.width, .h = geom.height
+    };
 }

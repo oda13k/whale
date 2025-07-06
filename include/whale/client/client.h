@@ -2,7 +2,6 @@
 #ifndef WHALE_CLIENT_CLIENT_H
 #define WHALE_CLIENT_CLIENT_H
 
-#include <wayland-server-core.h>
 #include <whale/compositor.h>
 #include <whale/output.h>
 #include <whale/types.h>
@@ -16,114 +15,69 @@ typedef enum
     ARRANGE_MONOCLE
 } WhaleClientArrangement;
 
-typedef struct whale_client_t
+struct whale_client;
+
+typedef void (*client_set_size_t)(
+    const wh_size2d_t* size, struct whale_client* client
+);
+typedef wh_size2d_t (*client_get_size_t)(struct whale_client* client);
+
+typedef struct whale_client* (*client_get_parent_t)(
+    struct whale_client* client
+);
+
+typedef void (*client_send_close_t)(struct whale_client* client);
+
+typedef struct wlr_surface* (*client_get_wlr_surface)(
+    const struct whale_client* client
+);
+
+typedef WhaleGeometry2D (*client_get_geometry_2d)(
+    const struct whale_client* client
+);
+
+typedef struct whale_client
 {
-    WhaleCompositor* comp;
-
-    struct wlr_xdg_toplevel* xdg_toplevel;
-    struct wlr_xdg_toplevel_decoration_v1* xdg_decoration;
-
     struct wlr_scene_tree* scene_tree;
 
     WhaleClientArrangement arrangement;
 
     WhaleOutput* bound_output;
-    // struct wl_list output_link;
+
+    void* data;
 
     struct
     {
-        struct wl_listener map;
-        struct wl_listener unmap;
-        struct wl_listener commit;
-
-        struct wl_listener destroy;
-        struct wl_listener set_title;
-
-        struct wl_listener decoration_request_mode;
-        struct wl_listener decoration_destroy;
-    } listeners;
-
+        client_set_size_t set_size;
+        client_get_size_t get_size;
+        client_get_parent_t get_parent;
+        client_send_close_t send_close;
+        client_get_wlr_surface get_wlr_surface;
+        client_get_geometry_2d get_internal_geometry;
+    } methods;
 } WhaleClient;
 
-int wh_client_subsystem_init(WhaleCompositor* comp);
+int wh_client_ss_init(WhaleCompositor* comp);
+
+/**
+ * Create a new base client. This client does not yet have any real
+ * functionality; that is left to the underlying implementation e.g. xdg shell.
+ */
+WhaleClient* wh_client_new(struct wlr_scene_tree* scene_tree);
+
+/**
+ * Destroy a client, removing it from any outputs, etc. This only destroys
+ * whatever was allocated by wh_client_new. Anything else must be handled by the
+ * underlying implementation e.g. xdg shell.
+ */
+void wh_client_destroy(WhaleClient* client);
 
 void wh_client_arrange_clients_on_output(WhaleOutput* output);
-
-int wh_client_refresh_all_client_bounds(WhaleCompositor* comp);
-
-/* These functions are each implemented in two different places. Those
-that need xdg context are implemented in client/xdg_shell.c and those
-that don't, are implemented in client/client.c. In the future if other
-protocols appear we can make these function pointers in WhaleClient. */
-
-/**
- * Check if a client has a parent. This function is xdg implemented.
- *
- * @param client Target client.
- *
- * @returns true if the client has a parent, false otherwise.
- */
-bool wh_client_has_parent(WhaleClient* client);
-
-/**
- * Get the parent of a client. Does no safety checks in order to determine if
- * the client actually has a parent. This function is xdg implemented.
- *
- * @param client Target client.
- *
- * @returns Pointer to the parent client.
- * @returns Probably a segfault if there is no parent.
- */
-WhaleClient* wh_client_get_parent(WhaleClient* client);
-
-/**
- * Set the position of a client. This function is client implemented.
- *
- * @param x Target x coord in pixels.
- * @param y Target y coord in pixels.
- * @param client Target client.
- */
-void wh_client_set_pos(wh_coord_t x, wh_coord_t y, WhaleClient* client);
-
-/**
- * Set the size of a client. This function is xdg implemented.
- *
- * @param w Target width in pixels
- * @param h Target height in pixels
- * @param client Target client.
- *
- * @returns 0 on success, negative value on failure.
- */
-int wh_client_set_size(wh_size_t w, wh_size_t h, WhaleClient* client);
-
-/**
- * Get the geometry of a client. The width and height are what you'd expect, but
- * the x and y are NOT the position of the client within the scene. They are
- * the bounds of the visible portion of the window. This function is xdg
- * implemented.
- *
- * @param client Target client.
- *
- * @return Pointer to the client's geometry.
- */
-struct wlr_box* wh_client_get_geometry(WhaleClient* client);
-
-/**
- * Get the position of a client on screen. This function is
- * client implemented.
- *
- * @param client Target client
- *
- * @return Vector containing the position.
- */
-wh_pos2d_t wh_client_get_pos(WhaleClient* client);
-
-wh_size2d_t wh_client_get_size(WhaleClient* client);
 
 int wh_client_refresh_bounds(WhaleClient* client);
 
 /**
- * Get the client at the given (output layout (resolution)) coords. The
+ * Get the client at the given coords. The
  * client is considered if the point at x, y can receive input focus.
  * This function is client implemented.
  *
@@ -140,8 +94,41 @@ WhaleClient* wh_client_get_at_coords(
 
 bool wh_client_is_mapped(const WhaleClient* client);
 
-WhaleClient* wh_client_from_wlr_surface(struct wlr_surface* surface);
+int wh_client_layout_to_client_coords(
+    WhaleClient* client,
+    const wh_pos2d_t* layout_coords,
+    wh_pos2d_t* client_coords
+);
 
-int wh_client_sigterm(WhaleClient* client);
+/**
+ * Map a client on the screen. A mapped client will be visible, focusable
+ * and considered for arrangement.
+ */
+void wh_client_map(WhaleClient* client);
+
+/**
+ * Unmap a client from the screen. An unampped client will not be visible, will
+ * not be focusable and will not be considered for arrangement. An unmapped
+ * client will retain it's bounding output.
+ */
+void wh_client_unmap(WhaleClient* client);
+
+void wh_client_set_pos(const wh_pos2d_t* pos, WhaleClient* client);
+wh_pos2d_t wh_client_get_pos(WhaleClient* client);
+
+void wh_client_set_size(const wh_size2d_t* size, WhaleClient* client);
+wh_size2d_t wh_client_get_size(WhaleClient* client);
+
+WhaleClient* wh_client_get_parent(WhaleClient* client);
+
+void wh_client_send_close(WhaleClient* client);
+
+struct wlr_surface* wh_client_get_wlr_surface(WhaleClient* client);
+
+WhaleGeometry2D wh_client_get_internal_geometry(WhaleClient* client);
+
+void wh_client_set_pos_and_size_atomic(
+    const wh_pos2d_t* pos, const wh_size2d_t* size, WhaleClient* client
+);
 
 #endif // !WHALE_CLIENT_CLIENT_H

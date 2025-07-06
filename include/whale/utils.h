@@ -7,6 +7,8 @@
 
 #define WH_ASSERT(expr) wh_assert(expr, #expr, __FILE__, __LINE__)
 
+#define WH_ASSERT_DEBUG(expr) wh_assert(expr, #expr, __FILE__, __LINE__)
+
 void wh_assert(bool expr, const char* str_expr, const char* file, size_t line);
 
 /**

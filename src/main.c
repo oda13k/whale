@@ -73,10 +73,10 @@ int main(int, char**)
         die("Failed to init some interfaces.");
 
     int st;
-    if ((st = wh_output_subsystem_init(&comp)) < 0)
+    if ((st = wh_output_ss_init(&comp)) < 0)
         return -st;
 
-    if ((st = wh_client_subsystem_init(&comp)) < 0)
+    if ((st = wh_client_ss_init(&comp)) < 0)
         return -st;
 
     if ((st = wh_input_init(&comp)) < 0)

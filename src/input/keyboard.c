@@ -25,7 +25,7 @@ static void terminate_focused_client(void*)
 {
     WhaleClient* client = wh_input_get_focused_client();
     if (client)
-        wh_client_sigterm(client);
+        wh_client_send_close(client);
 }
 
 static void spawn_term(void*)

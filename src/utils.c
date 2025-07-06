@@ -6,13 +6,14 @@
 #include <whale/log.h>
 #include <whale/utils.h>
 
-inline void
-wh_assert(bool expr, const char* str_expr, const char* file, size_t line)
+void wh_assert(bool expr, const char* str_expr, const char* file, size_t line)
 {
     if (expr)
         return;
 
-    wh_log(ERR, "Assertion failed: '%s', in file %s:%zu", str_expr, file, line);
+    wh_log(
+        FATAL, "Assertion failed: '%s', in file %s:%zu", str_expr, file, line
+    );
     abort();
 }
 

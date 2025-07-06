@@ -4,6 +4,8 @@
 
 #define WLR_USE_UNSTABLE
 #include <wayland-server-core.h>
+#include <whale/output.h>
+#include <whale/vector.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_cursor.h>
@@ -11,8 +13,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
-#include <wlr/types/wlr_xdg_decoration_v1.h>
-#include <wlr/types/wlr_xdg_shell.h>
 
 typedef struct
 {
@@ -20,7 +20,7 @@ typedef struct
     struct wl_event_source* key_repeat_source;
 } KeyboardGroup;
 
-typedef struct
+typedef struct whale_compositor
 {
     struct wl_display* display;
     struct wlr_backend* backend;
@@ -33,11 +33,9 @@ typedef struct
     struct wlr_allocator* allocator;
 
     /* List of attached outputs */
-    struct wl_list outputs;
+    VEC(WhaleOutput*) outputs;
 
     struct wlr_output_layout* output_layout;
-
-    struct wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
 
     struct wlr_cursor* cursor;
     struct wlr_xcursor_manager* cursor_manager;
@@ -68,8 +66,6 @@ typedef struct
 
         struct wl_listener new_input;
     } listeners;
-
-    struct wlr_xdg_shell* xdg_shell;
 } WhaleCompositor;
 
 #endif // !_WHALE_COMPOSITOR_H

@@ -8,12 +8,12 @@
 #include <whale/vector.h>
 #include <wlr/types/wlr_scene.h>
 
-struct WhaleCompositor;
-struct whale_client_t;
+struct whale_compositor;
+struct whale_client;
 
 typedef struct
 {
-    WhaleCompositor* comp;
+    struct whale_compositor* comp;
 
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
@@ -22,18 +22,16 @@ typedef struct
     struct wl_listener listener_destroy;
     struct wl_listener listener_request_state;
 
-    struct wl_list link;
-
-    VEC(struct whale_client_t*) clients;
+    VEC(struct whale_client*) clients;
 } WhaleOutput;
 
-int wh_output_subsystem_init(WhaleCompositor* comp);
+int wh_output_ss_init(struct whale_compositor* comp);
 
 WhaleOutput*
-wh_output_get_at(wh_coord_t x, wh_coord_t y, WhaleCompositor* comp);
+wh_output_get_at(wh_coord_t x, wh_coord_t y, struct whale_compositor* comp);
 
-WhaleOutput* wh_output_get_default(WhaleCompositor* comp);
+WhaleOutput* wh_output_get_default(struct whale_compositor* comp);
 
-struct wlr_box wh_output_get_geometry(WhaleOutput* output);
+WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output);
 
 #endif // WHALE_OUTPUT_H
