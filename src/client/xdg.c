@@ -15,6 +15,7 @@
 #include <whale/types.h>
 #include <whale/utils.h>
 #include <wlr/types/wlr_server_decoration.h>
+#include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
 /* Modified version wl_container_of that takes in a type instead of a variable
@@ -22,22 +23,20 @@ upon which we do a typeof() */
 #define CONTAINER_OF(_ptr, _sample_type, _member)                              \
     ((_sample_type*)((char*)(_ptr) - offsetof(_sample_type, _member)))
 
-#define WH_CLIENT_FROM_XDG_LISTENER(_ptr, _listener_name)                      \
-    (CONTAINER_OF(_ptr, WhaleXDGClientData, listeners._listener_name)->base)
+#define WH_SURFACE_FROM_XDG_LISTENER(_ptr, _listener_name)                     \
+    (CONTAINER_OF(_ptr, WhaleXDGClientData, listeners._listener_name)->surface)
+
+#define XDG_DATA_FROM_SURFACE(_surf) (_surf->impl.data)
 
 typedef struct
 {
-    WhaleClient* base;
+    WhaleSurface* surface;
 
     struct wlr_xdg_toplevel* toplevel;
     struct wlr_xdg_toplevel_decoration_v1* toplevel_decoration;
 
     struct
     {
-        struct wl_listener map;
-        struct wl_listener unmap;
-        struct wl_listener commit;
-
         struct wl_listener destroy;
         struct wl_listener set_title;
 
@@ -46,61 +45,30 @@ typedef struct
     } listeners;
 } WhaleXDGClientData;
 
+static WhaleCompositor* g_comp;
 struct wlr_xdg_shell* g_xdg_shell;
 struct wlr_xdg_decoration_manager_v1* g_xdg_decoration_manager;
 
-static WhaleClient*
-wh_client_from_xdg_toplevel(struct wlr_xdg_toplevel* toplevel)
+static WhaleSurface*
+wh_surface_from_xdg_toplevel(struct wlr_xdg_toplevel* toplevel)
 {
-    return toplevel->base->data;
-}
-
-static bool wh_client_is_implicit_floating(WhaleClient* client)
-{
-    WhaleXDGClientData* xdg_data = client->data;
-
-    struct wlr_xdg_toplevel* toplevel = xdg_data->toplevel;
-    struct wlr_xdg_toplevel_state* state = &toplevel->current;
-
-    /* If the client has a parent or if the client demands it's own
-    size exactly, we treat it as floating. */
-    bool demands_size = state->min_width && state->max_height &&
-                        (state->min_width == state->max_width ||
-                         state->min_height == state->max_height);
-
-    return toplevel->parent || demands_size;
+    WH_ASSERT(toplevel->base->data);
+    WhaleClient* client = toplevel->base->data;
+    return &client->surface;
 }
 
 /* Client function implementations */
-static void xdg_set_size(const wh_size2d_t* size, WhaleClient* client)
+static void xdg_set_size(const wh_size2d_t* size, WhaleSurface* surface)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = XDG_DATA_FROM_SURFACE(surface);
     WH_ASSERT_DEBUG(xdg_data);
 
     wlr_xdg_toplevel_set_size(xdg_data->toplevel, size->w, size->h);
-
-    /* stinky hack: wlr_xdg_toplevel_set_size is an async
-    request, whereas position setting (for example) is done immediately. This
-    means that when we do a move+resize combo, the move will be done immediately
-    but the resize will take a *bit* more. This leads to a slight flicker where
-    the moved window will display it's contents on an adjecent screen for a
-    split second before the resize request goes through. We fix this by clipping
-    it's contents so it can't display them outside it's new size. What can not
-    be fixed this way is how a window will sometimes spawn with it's initial
-    (client selected) size for a split second before the size it *should* have
-    actually gets set. */
-    struct wlr_box clip = {
-        .x = xdg_data->toplevel->base->geometry.x,
-        .y = xdg_data->toplevel->base->geometry.x,
-        .width = size->w,
-        .height = size->h
-    };
-    wlr_scene_subsurface_tree_set_clip(&client->scene_tree->node, &clip);
 }
 
-static wh_size2d_t xdg_get_size(WhaleClient* client)
+static wh_size2d_t xdg_get_size(WhaleSurface* surface)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = XDG_DATA_FROM_SURFACE(surface);
     WH_ASSERT_DEBUG(xdg_data);
 
     return (wh_size2d_t){.w = xdg_data->toplevel->base->geometry.width,
@@ -109,34 +77,26 @@ static wh_size2d_t xdg_get_size(WhaleClient* client)
 
 static WhaleClient* xdg_get_parent(WhaleClient* client)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = client->surface.impl.data;
     WH_ASSERT_DEBUG(xdg_data);
 
     if (!xdg_data->toplevel->parent)
         return nullptr;
 
-    return wh_client_from_xdg_toplevel(xdg_data->toplevel->parent);
+    return wh_surface_from_xdg_toplevel(xdg_data->toplevel->parent);
 }
 
 static void xdg_send_close(WhaleClient* client)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = client->surface.impl.data;
     WH_ASSERT_DEBUG(xdg_data);
 
     wlr_xdg_toplevel_send_close(xdg_data->toplevel);
 }
 
-static struct wlr_surface* xdg_get_wlr_surface(const WhaleClient* client)
-{
-    WhaleXDGClientData* xdg_data = client->data;
-    WH_ASSERT_DEBUG(xdg_data);
-
-    return xdg_data->toplevel->base->surface;
-}
-
 static WhaleGeometry2D xdg_get_internal_geometry(const WhaleClient* client)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = client->surface.impl.data;
     WH_ASSERT_DEBUG(xdg_data);
 
     struct wlr_box* geom = &xdg_data->toplevel->base->geometry;
@@ -146,9 +106,32 @@ static WhaleGeometry2D xdg_get_internal_geometry(const WhaleClient* client)
     };
 }
 
-static void xdg_set_decoration_mode(WhaleClient* client)
+static void xdg_get_minmax_size(
+    wh_size2d_t* min_size, wh_size2d_t* max_size, WhaleClient* client
+)
 {
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = client->surface.impl.data;
+    WH_ASSERT_DEBUG(xdg_data);
+
+    struct wlr_xdg_toplevel* toplevel = xdg_data->toplevel;
+    struct wlr_xdg_toplevel_state* state = &toplevel->current;
+
+    if (min_size)
+    {
+        min_size->w = state->min_width;
+        min_size->h = state->min_height;
+    }
+
+    if (max_size)
+    {
+        max_size->w = state->max_width;
+        max_size->h = state->max_height;
+    }
+}
+
+static void xdg_set_decoration_mode(WhaleSurface* surface)
+{
+    WhaleXDGClientData* xdg_data = XDG_DATA_FROM_SURFACE(surface);
     WH_ASSERT_DEBUG(xdg_data);
 
     if (!xdg_data->toplevel->base->initialized)
@@ -163,75 +146,66 @@ static void xdg_set_decoration_mode(WhaleClient* client)
 /* Window events */
 static void on_xdg_toplevel_set_title(struct wl_listener* listener, void*)
 {
-    [[maybe_unused]] WhaleClient* client =
-        WH_CLIENT_FROM_XDG_LISTENER(listener, set_title);
+    [[maybe_unused]] WhaleSurface* surface =
+        WH_SURFACE_FROM_XDG_LISTENER(listener, set_title);
 }
 
-static void on_xdg_toplevel_commit(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = WH_CLIENT_FROM_XDG_LISTENER(listener, commit);
+// static void on_xdg_toplevel_commit(struct wl_listener* listener, void*)
+// {
+//     WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, commit);
 
-    WhaleXDGClientData* xdg_data = client->data;
-    WH_ASSERT_DEBUG(xdg_data);
+//     WhaleXDGClientData* xdg_data = client->data;
+//     WH_ASSERT_DEBUG(xdg_data);
 
-    if (xdg_data->toplevel->base->initial_commit)
-    {
-        if (xdg_data->toplevel_decoration)
-            xdg_set_decoration_mode(client);
+//     if (xdg_data->toplevel->base->initial_commit)
+//     {
+//         if (xdg_data->toplevel_decoration)
+//             xdg_set_decoration_mode(client);
 
-        /* The surface needs to receive a configure in order to work. */
-        wlr_xdg_surface_schedule_configure(xdg_data->toplevel->base);
-    }
+//         /* The surface needs to receive a configure in order to work. */
+//         wlr_xdg_surface_schedule_configure(xdg_data->toplevel->base);
+//     }
 
-    // WhaleClientArrangement default_arrangement = ARRANGE_TILED;
-    // if (wh_client_is_implicit_floating(client))
-    // {
-    //     client->arrangement = ARRANGE_FLOATING;
-    //     wh_client_arrange_clients_on_output(client->bound_output);
-    // }
-    // else
-    // {
-    //     // FIXME: keep old arrangement
-    //     client->arrangement = default_arrangement;
-    // }
+//     wlr_scene_node_set_position(
+//         &client->scene_surface_tree->node,
+//         -xdg_data->toplevel->base->geometry.x,
+//         -xdg_data->toplevel->base->geometry.y
+//     );
+// }
 
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    // wh_input_focus_client_under(&cursor_pos);
-}
+// static void on_xdg_toplevel_map(struct wl_listener* listener, void*)
+// {
+//     WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, map);
 
-static void on_xdg_toplevel_map(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = WH_CLIENT_FROM_XDG_LISTENER(listener, map);
+//     wh_client_map(client);
+//     wh_workspace_init_client_layout(client);
+//     wh_workspace_arrange(client->bound_workspace);
 
-    if (wh_client_is_implicit_floating(client))
-        client->arrangement = ARRANGE_FLOATING;
+//     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+//     wh_input_focus_client_under(&cursor_pos);
+// }
 
-    wh_client_map(client);
-    wh_client_arrange_clients_on_output(client->bound_output);
+// static void on_xdg_toplevel_unmap(struct wl_listener* listener, void*)
+// {
+//     WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, unmap);
 
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    wh_input_focus_client_under(&cursor_pos);
-}
+//     wh_client_unmap(client);
+//     wh_workspace_arrange(client->bound_workspace);
 
-static void on_xdg_toplevel_unmap(struct wl_listener* listener, void*)
-{
-    WhaleClient* client = WH_CLIENT_FROM_XDG_LISTENER(listener, unmap);
-
-    wh_client_unmap(client);
-    wh_client_arrange_clients_on_output(client->bound_output);
-
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    wh_input_focus_client_under(&cursor_pos);
-}
+//     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+//     wh_input_focus_client_under(&cursor_pos);
+// }
 
 static void on_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
-    WhaleClient* client = WH_CLIENT_FROM_XDG_LISTENER(listener, destroy);
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, destroy);
 
-    UNLISTEN(&xdg_data->listeners.map);
-    UNLISTEN(&xdg_data->listeners.unmap);
-    UNLISTEN(&xdg_data->listeners.commit);
+    /* Since this is a toplevel destroy, we must have a parent client */
+    WhaleClient* client = surface->parent_client;
+    WH_ASSERT(client);
+
+    WhaleXDGClientData* xdg_data = surface->impl.data;
+
     UNLISTEN(&xdg_data->listeners.destroy);
     UNLISTEN(&xdg_data->listeners.set_title);
 
@@ -240,71 +214,46 @@ static void on_xdg_toplevel_destroy(struct wl_listener* listener, void*)
     wh_client_destroy(client);
 }
 
+static void xdg_surface_init(WhaleSurface* surface)
+{
+    WhaleXDGClientData* xdg_data = surface->impl.data;
+
+    wlr_xdg_surface_schedule_configure(xdg_data->toplevel->base);
+}
+
 static void on_xdg_toplevel_new(struct wl_listener* listener, void* data)
 {
-    WhaleCompositor* comp =
-        wl_container_of(listener, comp, listeners.xdg_new_toplevel);
-
     struct wlr_xdg_toplevel* toplevel = data;
-
-    /* A window's contents are represented using a scene tree. This is the thing
-    that actually puts the window's contents on the root scene tree which in
-    turn gets put on an output. */
-    struct wlr_scene_tree* tree =
-        wlr_scene_xdg_surface_create(&comp->root_scene->tree, toplevel->base);
-    if (!tree)
-    {
-        wh_log(FATAL, "Failed to create scene tree.");
-        exit(1);
-    }
-
-    WhaleClient* client = wh_client_new(tree);
-    if (!client)
-    {
-        wlr_scene_node_destroy(&tree->node);
-        wh_log(FATAL, "Failed to allocate whale client.");
-        exit(1);
-    }
 
     WhaleXDGClientData* xdg_data = calloc(1, sizeof(WhaleXDGClientData));
     if (!xdg_data)
     {
-        wh_client_destroy(client);
         wh_log(FATAL, "Failed to allocate xdg data.");
         exit(1);
     }
 
-    client->data = xdg_data;
+    WhaleSurfaceImplementation impl = {
+        .data = xdg_data,
+        .set_size = xdg_set_size,
+        .get_size = xdg_get_size,
+        .get_parent = xdg_get_parent,
+        .send_close = xdg_send_close,
+        .get_internal_geometry = xdg_get_internal_geometry,
+        .get_minmax_size = xdg_get_minmax_size,
+        .surface_init = xdg_surface_init
+    };
 
-    xdg_data->base = client;
+    WhaleClient* client = wh_client_new(toplevel->base->surface, &impl);
+    if (!client)
+    {
+        wh_log(FATAL, "Failed to allocate whale client.");
+        exit(1);
+    }
+
+    xdg_data->surface = &client->surface;
     xdg_data->toplevel = toplevel;
     /* The xdg surface can point back to the client */
     xdg_data->toplevel->base->data = client;
-
-    client->methods.set_size = xdg_set_size;
-    client->methods.get_size = xdg_get_size;
-    client->methods.get_parent = xdg_get_parent;
-    client->methods.send_close = xdg_send_close;
-    client->methods.get_wlr_surface = xdg_get_wlr_surface;
-    client->methods.get_internal_geometry = xdg_get_internal_geometry;
-
-    LISTEN(
-        &xdg_data->toplevel->base->surface->events.map,
-        &xdg_data->listeners.map,
-        on_xdg_toplevel_map
-    );
-
-    LISTEN(
-        &xdg_data->toplevel->base->surface->events.unmap,
-        &xdg_data->listeners.unmap,
-        on_xdg_toplevel_unmap
-    );
-
-    LISTEN(
-        &xdg_data->toplevel->base->surface->events.commit,
-        &xdg_data->listeners.commit,
-        on_xdg_toplevel_commit
-    );
 
     LISTEN(
         &xdg_data->toplevel->events.destroy,
@@ -319,23 +268,81 @@ static void on_xdg_toplevel_new(struct wl_listener* listener, void* data)
     );
 }
 
+static void on_xdg_popup_destroy(struct wl_listener* listener, void*)
+{
+    // WhaleXDGPopupData* popup =
+    //     CONTAINER_OF(listener, WhaleXDGPopupData, listeners.destroy);
+
+    // wlr_scene_node_destroy(&popup->scene_tree->node);
+    // popup->scene_tree = nullptr;
+
+    // UNLISTEN(&popup->listeners.commit);
+    // UNLISTEN(&popup->listeners.destroy);
+
+    // free(popup);
+}
+
+static void on_xdg_popup_commit(struct wl_listener* listener, void*)
+{
+    // WhaleXDGPopupData* popup =
+    //     CONTAINER_OF(listener, WhaleXDGPopupData, listeners.commit);
+
+    // if (popup->xdg_popup->base->initial_commit)
+    //     wlr_xdg_surface_schedule_configure(popup->xdg_popup->base);
+}
+
+static void on_xdg_popup_new(struct wl_listener*, void* data)
+{
+    struct wlr_xdg_popup* xdg_popup = data;
+
+    // WhaleXDGPopupData* popup = calloc(1, sizeof(WhaleXDGPopupData));
+    // if (!popup)
+    // {
+    //     wlr_xdg_popup_destroy(xdg_popup);
+    //     return;
+    // }
+
+    // WH_ASSERT(xdg_popup->parent);
+    // struct wlr_xdg_toplevel* parent_xdg_toplevel =
+    //     wlr_xdg_toplevel_try_from_wlr_surface(xdg_popup->parent);
+    // WH_ASSERT(parent_xdg_toplevel);
+
+    // WhaleClient* parent = wh_surface_from_xdg_toplevel(parent_xdg_toplevel);
+
+    // popup->xdg_popup = xdg_popup;
+    // popup->scene_tree =
+    //     wlr_scene_xdg_surface_create(parent->scene_tree, xdg_popup->base);
+
+    // LISTEN(
+    //     &xdg_popup->base->surface->events.commit,
+    //     &popup->listeners.commit,
+    //     &on_xdg_popup_commit
+    // );
+
+    // LISTEN(
+    //     &xdg_popup->events.destroy,
+    //     &popup->listeners.destroy,
+    //     &on_xdg_popup_destroy
+    // );
+}
+
 static void
 on_xdg_toplevel_decoration_request_mode(struct wl_listener* listener, void*)
 {
-    WhaleClient* client =
-        WH_CLIENT_FROM_XDG_LISTENER(listener, decoration_request_mode);
+    WhaleSurface* surface =
+        WH_SURFACE_FROM_XDG_LISTENER(listener, decoration_request_mode);
 
     /* Ignore requested decoration modes, turn them off instead. */
-    xdg_set_decoration_mode(client);
+    xdg_set_decoration_mode(surface);
 }
 
 static void
 on_xdg_toplevel_decoration_destroy(struct wl_listener* listener, void*)
 {
-    WhaleClient* client =
-        WH_CLIENT_FROM_XDG_LISTENER(listener, decoration_destroy);
+    WhaleSurface* surface =
+        WH_SURFACE_FROM_XDG_LISTENER(listener, decoration_destroy);
 
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = surface->impl.data;
     WH_ASSERT_DEBUG(xdg_data);
 
     xdg_data->toplevel_decoration = nullptr;
@@ -347,9 +354,9 @@ static void on_xdg_toplevel_decoration_new(struct wl_listener*, void* data)
 {
     struct wlr_xdg_toplevel_decoration_v1* decoration = data;
 
-    WhaleClient* client = wh_client_from_xdg_toplevel(decoration->toplevel);
+    WhaleSurface* surface = wh_surface_from_xdg_toplevel(decoration->toplevel);
 
-    WhaleXDGClientData* xdg_data = client->data;
+    WhaleXDGClientData* xdg_data = surface->impl.data;
     WH_ASSERT_DEBUG(xdg_data);
 
     xdg_data->toplevel_decoration = decoration;
@@ -365,10 +372,13 @@ static void on_xdg_toplevel_decoration_new(struct wl_listener*, void* data)
         &xdg_data->listeners.decoration_destroy,
         on_xdg_toplevel_decoration_destroy
     );
+
+    xdg_set_decoration_mode(surface);
 }
 
 int wh_client_xdg_shell_init(WhaleCompositor* comp)
 {
+    g_comp = comp;
     /**
      * The xdg shell is a protocol through which clients can create
      * toplevel windows and popups.
@@ -395,6 +405,12 @@ int wh_client_xdg_shell_init(WhaleCompositor* comp)
         &g_xdg_shell->events.new_toplevel,
         &comp->listeners.xdg_new_toplevel,
         on_xdg_toplevel_new
+    );
+
+    LISTEN(
+        &g_xdg_shell->events.new_popup,
+        &comp->listeners.xdg_new_popup,
+        on_xdg_popup_new
     );
 
     /* This is the intended client decoration protocol. */

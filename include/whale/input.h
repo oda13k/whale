@@ -7,9 +7,9 @@
 
 int wh_input_init(WhaleCompositor* comp);
 
-WhaleClient* wh_input_focus_client_under(const wh_pos2d_t* pos);
+WhaleSurface* wh_input_focus_surface_at_coords(const wh_pos2d_t* pos);
 
-WhaleClient* wh_input_get_focused_client();
+WhaleSurface* wh_input_get_focused_surface();
 
 wh_pos2d_t wh_input_get_cursor_pos();
 

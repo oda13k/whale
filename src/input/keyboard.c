@@ -4,6 +4,7 @@
 #include <whale/input/keyboard.h>
 #include <whale/log.h>
 #include <whale/utils.h>
+#include <wlr/backend/session.h>
 #include <xkbcommon/xkbcommon.h>
 
 static const struct xkb_rule_names g_static_xkb_rules = {
@@ -23,9 +24,9 @@ static WhaleCompositor* g_comp;
 
 static void terminate_focused_client(void*)
 {
-    WhaleClient* client = wh_input_get_focused_client();
-    if (client)
-        wh_client_send_close(client);
+    WhaleSurface* surface = wh_input_get_focused_surface();
+    if (surface)
+        wh_client_send_close(surface->parent_client);
 }
 
 static void spawn_term(void*)
@@ -33,11 +34,176 @@ static void spawn_term(void*)
     wh_spawn_process("/bin/alacritty");
 }
 
+static void inc_tiled_master_split(void*)
+{
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+
+    if (output)
+    {
+        wh_workspace_tiling_increment_master_split(
+            0.1, wh_output_get_active_workspace(output)
+        );
+        wh_workspace_arrange(wh_output_get_active_workspace(output));
+    }
+}
+
+static void dec_tiled_master_split(void*)
+{
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+
+    if (output)
+    {
+        wh_workspace_tiling_decrement_master_split(
+            0.1, wh_output_get_active_workspace(output)
+        );
+        wh_workspace_arrange(wh_output_get_active_workspace(output));
+    }
+}
+
+static void inc_tiled_master_max_clients(void*)
+{
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+
+    if (output)
+    {
+        wh_workspace_tiling_increment_master_max_clients(
+            1, wh_output_get_active_workspace(output)
+        );
+        wh_workspace_arrange(wh_output_get_active_workspace(output));
+    }
+}
+
+static void dec_tiled_master_max_clients(void*)
+{
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+
+    if (output)
+    {
+        wh_workspace_tiling_decrement_master_max_clients(
+            1, wh_output_get_active_workspace(output)
+        );
+        wh_workspace_arrange(wh_output_get_active_workspace(output));
+    }
+}
+
+static void switch_workspace(void* data)
+{
+    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+
+    if (output)
+    {
+        wh_output_activate_workspace((u8)data, output);
+
+        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+        wh_input_focus_surface_at_coords(&cursor_pos);
+    }
+}
+
+#define SWITCH_WORKSPACE_BINDING(_workspace)                                   \
+    {.mod = MOD_NORMAL,                                                        \
+     .key = XKB_KEY_##_workspace,                                              \
+     .callback = switch_workspace,                                             \
+     .data = (void*)_workspace}
+
+static void move_client_to_workspace(void* data)
+{
+    WhaleSurface* surface = wh_input_get_focused_surface();
+    if (!surface)
+        return;
+
+    WhaleClient* client = surface->parent_client;
+    /* Sanity check: a focusable clients must have a bound workspace */
+    // FIXME: move absolute parenting client
+    WH_ASSERT(client->bound_workspace);
+
+    WhaleWorkspace* new_ws = wh_output_get_workspace(
+        (u8)data, client->bound_workspace->parent_output
+    );
+
+    if (new_ws == client->bound_workspace)
+        return;
+
+    WhaleWorkspace* old_ws = wh_workspace_unbind_client(client);
+    /* If the client was managed, we need to re-arrange the workspace, as this
+     * is a workspace that is focused right now */
+    if (client->layout == LAYOUT_TILING)
+        wh_workspace_arrange(old_ws);
+
+    /* We don't need to arrange this workspace here, it'll get re-arranged when
+    we switch to it. (should it be the other way around?) */
+    wh_workspace_bind_client(client, new_ws);
+}
+
+#define MOVE_CLIENT_TO_WORKSPACE(_workspace)                                   \
+    {.mod = MOD_IMPORTANT,                                                     \
+     .key = XKB_KEY_##_workspace,                                              \
+     .callback = move_client_to_workspace,                                     \
+     .data = (void*)_workspace}
+
+static void chvt(void* data)
+{
+    wlr_session_change_vt(g_comp->session, (u8)data);
+}
+
+#define CHVT_BINDING(_vt)                                                      \
+    {.mod = WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,                              \
+     .key = XKB_KEY_XF86Switch_VT_##_vt,                                       \
+     .callback = chvt,                                                         \
+     .data = (void*)_vt}
+
 static const WhaleKeyboardBinding g_static_bindings[] = {
     {.mod = MOD_IMPORTANT,
      .key = XKB_KEY_c,
      .callback = terminate_focused_client},
     {.mod = MOD_NORMAL, .key = XKB_KEY_grave, .callback = spawn_term},
+
+    {.mod = MOD_NORMAL, .key = XKB_KEY_h, .callback = dec_tiled_master_split},
+    {.mod = MOD_NORMAL, .key = XKB_KEY_l, .callback = inc_tiled_master_split},
+
+    {.mod = MOD_NORMAL,
+     .key = XKB_KEY_i,
+     .callback = inc_tiled_master_max_clients},
+    {.mod = MOD_NORMAL,
+     .key = XKB_KEY_d,
+     .callback = dec_tiled_master_max_clients},
+
+    SWITCH_WORKSPACE_BINDING(1),
+    SWITCH_WORKSPACE_BINDING(2),
+    SWITCH_WORKSPACE_BINDING(3),
+    SWITCH_WORKSPACE_BINDING(4),
+    SWITCH_WORKSPACE_BINDING(5),
+
+    {.mod = MOD_IMPORTANT,
+     .key = XKB_KEY_exclam,
+     .callback = move_client_to_workspace,
+     .data = (void*)1},
+    {.mod = MOD_IMPORTANT,
+     .key = XKB_KEY_at,
+     .callback = move_client_to_workspace,
+     .data = (void*)2},
+    {.mod = MOD_IMPORTANT,
+     .key = XKB_KEY_numbersign,
+     .callback = move_client_to_workspace,
+     .data = (void*)3},
+    {.mod = MOD_IMPORTANT,
+     .key = XKB_KEY_dollar,
+     .callback = move_client_to_workspace,
+     .data = (void*)4},
+    {.mod = MOD_IMPORTANT,
+     .key = XKB_KEY_percent,
+     .callback = move_client_to_workspace,
+     .data = (void*)5},
+
+    CHVT_BINDING(1),
+    CHVT_BINDING(2),
+    CHVT_BINDING(3),
+    CHVT_BINDING(4),
+    CHVT_BINDING(5),
 };
 
 static size_t binding_count =
@@ -78,7 +244,7 @@ static void on_keyboard_key(struct wl_listener* listener, void* data)
             {
                 if (xkb_keysym_to_lower(keys[k]) == binding->key)
                 {
-                    binding->callback(binding->callback_data);
+                    binding->callback(binding->data);
                     handled = true;
                     break;
                 }

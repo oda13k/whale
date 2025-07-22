@@ -15,6 +15,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -36,7 +37,11 @@ static int wh_init_wl_interfaces(WhaleCompositor* comp)
 
     /* Interface for inter-process communication such as copy-past and
      * drag'n'drop */
+
     wlr_data_device_manager_create(comp->display);
+
+    // struct wlr_data_control_device_v1* data_ctrl =
+    //     wlr_data_control_manager_v1_create(comp->display);
 
     return 0;
 }
@@ -88,6 +93,10 @@ int main(int, char**)
         die("Failed to create Wayland socket!");
 
     setenv("WAYLAND_DISPLAY", socket, 1);
+
+    /* For debugging purposes */
+    if (getenv("DISPLAY"))
+        unsetenv("DISPLAY");
 
     wh_log(INFO, "WAYLAND_DISPLAY: %s", socket);
 

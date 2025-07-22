@@ -6,12 +6,12 @@
 #include <wayland-server-core.h>
 #include <whale/types.h>
 #include <whale/vector.h>
+#include <whale/workspace.h>
 #include <wlr/types/wlr_scene.h>
 
 struct whale_compositor;
-struct whale_client;
 
-typedef struct
+typedef struct whale_output
 {
     struct whale_compositor* comp;
 
@@ -22,16 +22,22 @@ typedef struct
     struct wl_listener listener_destroy;
     struct wl_listener listener_request_state;
 
-    VEC(struct whale_client*) clients;
+    VEC(WhaleWorkspace) workspaces;
+    WhaleWorkspace* active_workspace;
 } WhaleOutput;
 
 int wh_output_ss_init(struct whale_compositor* comp);
 
-WhaleOutput*
-wh_output_get_at(wh_coord_t x, wh_coord_t y, struct whale_compositor* comp);
+WhaleOutput* wh_output_get_at(const wh_pos2d_t* pos);
 
-WhaleOutput* wh_output_get_default(struct whale_compositor* comp);
+WhaleOutput* wh_output_get_main();
 
 WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output);
+
+int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output);
+
+WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output);
+
+WhaleWorkspace* wh_output_get_workspace(u8 workspace_idx, WhaleOutput* output);
 
 #endif // WHALE_OUTPUT_H

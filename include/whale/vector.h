@@ -64,17 +64,35 @@
 
 #define VEC_REMOVE(_elem, _vec)                                                \
     {                                                                          \
-        size_t i = 0;                                                          \
-        for (; i < (_vec)->count; ++i)                                         \
+        size_t _i = 0;                                                         \
+        for (; _i < (_vec)->count; ++_i)                                       \
         {                                                                      \
-            if ((_vec)->data[i] == _elem)                                      \
+            if ((_vec)->data[_i] == _elem)                                     \
             {                                                                  \
                 --(_vec)->count;                                               \
                 break;                                                         \
             }                                                                  \
         }                                                                      \
-        for (; i < (_vec)->count; ++i)                                         \
-            (_vec)->data[i] = (_vec)->data[i + 1];                             \
+        for (; _i < (_vec)->count; ++_i)                                       \
+            (_vec)->data[_i] = (_vec)->data[_i + 1];                           \
+    }
+
+#define VEC_AT(_idx, _vec) ((_vec)->data[_idx])
+
+#define VEC_GET_LENGTH(_vec) ((_vec)->count)
+
+#define VEC_GET_CAPACITY(_vec) ((_vec)->capacity)
+
+#define VEC_INCLUDES(_elem, _includes, _vec)                                   \
+    {                                                                          \
+        for (size_t _i = 0; _i < (_vec)->count; ++_i)                          \
+        {                                                                      \
+            if ((_vec)->data[_i] == _elem)                                     \
+            {                                                                  \
+                _includes = true;                                              \
+                break;                                                         \
+            }                                                                  \
+        }                                                                      \
     }
 
 #endif // !WHALE_VECTOR_H

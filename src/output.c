@@ -11,6 +11,8 @@
 #include <whale/types.h>
 #include <wlr/backend.h>
 
+static WhaleCompositor* g_comp;
+
 static void on_output_frame(struct wl_listener* listener, void*)
 {
     WhaleOutput* output = wl_container_of(listener, output, listener_frame);
@@ -25,6 +27,10 @@ static void on_output_frame(struct wl_listener* listener, void*)
 static void on_output_destroy(struct wl_listener* listener, void*)
 {
     WhaleOutput* output = wl_container_of(listener, output, listener_destroy);
+
+    TODO_LOG(
+        "Fix dangling clients on this output's workspaces. + all sorts of memory leaks"
+    );
 
     VEC_REMOVE(output, &output->comp->outputs);
 
@@ -114,6 +120,22 @@ static int wh_output_configure(WhaleOutput* output)
     return 0;
 }
 
+static int wh_output_init_workspaces(WhaleOutput* output)
+{
+    const size_t workspace_count = 5;
+
+    VEC_INIT_SIZED(workspace_count, &output->workspaces);
+    for (size_t i = 0; i < workspace_count; ++i)
+    {
+        WhaleWorkspace tmp = {0};
+        VEC_PUSH(tmp, &output->workspaces);
+        wh_workspace_init(output, &VEC_AT(i, &output->workspaces));
+    }
+
+    output->active_workspace = &VEC_AT(0, &output->workspaces);
+    return 0;
+}
+
 static void on_output_new(struct wl_listener* listener, void* data)
 {
     WhaleCompositor* comp =
@@ -138,7 +160,8 @@ static void on_output_new(struct wl_listener* listener, void* data)
     output->comp = comp;
     wlr_output->data = output;
 
-    VEC_INIT(&output->clients);
+    /* Create the workspaces */
+    wh_output_init_workspaces(output);
 
     /* Set the output's event listeners */
     LISTEN(&wlr_output->events.frame, &output->listener_frame, on_output_frame);
@@ -169,7 +192,7 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
         wl_container_of(listener, comp, listeners.output_layout_change);
 
     VEC_FOR_EACH (output, &comp->outputs)
-        wh_client_arrange_clients_on_output(*output);
+        wh_workspace_arrange((*output)->active_workspace);
 
     struct wlr_box scene_geom;
     wlr_output_layout_get_box(comp->output_layout, NULL, &scene_geom);
@@ -185,6 +208,7 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
 
 int wh_output_ss_init(WhaleCompositor* comp)
 {
+    g_comp = comp;
     comp->root_scene = wlr_scene_create();
 
     float color[] = {0x12 / 255.f, 0x12 / 255.f, 0x12 / 255.f, 0xFF / 255.f};
@@ -211,10 +235,10 @@ int wh_output_ss_init(WhaleCompositor* comp)
     return 0;
 }
 
-WhaleOutput* wh_output_get_at(wh_coord_t x, wh_coord_t y, WhaleCompositor* comp)
+WhaleOutput* wh_output_get_at(const wh_pos2d_t* pos)
 {
     struct wlr_output* output =
-        wlr_output_layout_output_at(comp->output_layout, x, y);
+        wlr_output_layout_output_at(g_comp->output_layout, pos->x, pos->y);
 
     if (!output)
         return NULL;
@@ -222,10 +246,10 @@ WhaleOutput* wh_output_get_at(wh_coord_t x, wh_coord_t y, WhaleCompositor* comp)
     return wh_output_from_wlr_output(output);
 }
 
-WhaleOutput* wh_output_get_default(WhaleCompositor* comp)
+WhaleOutput* wh_output_get_main()
 {
     return wh_output_from_wlr_output(
-        wlr_output_layout_get_center_output(comp->output_layout)
+        wlr_output_layout_get_center_output(g_comp->output_layout)
     );
 }
 
@@ -238,4 +262,50 @@ WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output)
     return (WhaleGeometry2D){
         .x = geom.x, .y = geom.y, .w = geom.width, .h = geom.height
     };
+}
+
+WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output)
+{
+    return output->active_workspace;
+}
+
+int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
+{
+    /* Workspaces start from 1 and a value of 0 is invalid */
+    WH_ASSERT(workspace_idx > 0);
+    /* But internally they are 0-based indexed. */
+    --workspace_idx;
+
+    size_t max_workspace_idx = VEC_GET_LENGTH(&output->workspaces) - 1;
+    if (workspace_idx > max_workspace_idx)
+        workspace_idx = max_workspace_idx;
+
+    if (output->active_workspace == &VEC_AT(workspace_idx, &output->workspaces))
+        return 0;
+
+    // VEC_FOR_EACH (client, &output->active_workspace->clients)
+    //     wh_client_unmap(*client);
+
+    // output->active_workspace = &VEC_AT(workspace_idx, &output->workspaces);
+    // VEC_FOR_EACH (client, &output->active_workspace->clients)
+    //     wh_client_map(*client);
+
+    TODO_LOG("workspace");
+
+    wh_workspace_arrange(output->active_workspace);
+    return 0;
+}
+
+WhaleWorkspace* wh_output_get_workspace(u8 workspace_idx, WhaleOutput* output)
+{
+    /* Workspaces start from 1 and a value of 0 is invalid */
+    WH_ASSERT(workspace_idx > 0);
+    /* But internally they are 0-based indexed. */
+    --workspace_idx;
+
+    size_t max_workspace_idx = VEC_GET_LENGTH(&output->workspaces) - 1;
+    if (workspace_idx > max_workspace_idx)
+        workspace_idx = max_workspace_idx;
+
+    return &VEC_AT(workspace_idx, &output->workspaces);
 }

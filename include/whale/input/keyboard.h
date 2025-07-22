@@ -12,7 +12,7 @@ typedef struct
     xkb_keysym_t key;
     wh_keyboard_mod_t mod;
     void (*callback)(void* data);
-    void* callback_data;
+    void* data;
 } WhaleKeyboardBinding;
 
 int wh_input_keyboard_ss_init(WhaleCompositor* comp);

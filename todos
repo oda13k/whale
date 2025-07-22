@@ -1,0 +1,16 @@
+- factor out wlr_surface events from xdg into client
+- add popup windows
+- xwayland
+- figure out why copy-paste doesn't work between windows
+- add way to quit whale
+- figure out whale clean-up code
+- add transactions for async requests
+- output cleanup
+- multiple output setups
+- electron auto-setup
+- floating windows
+- differentitate between explicit and implicit floating windows (maybe?)
+- figure out the whale-inside-whale crash (if cleanup doesn't fix it)
+- alt-tab to rotate window array
+- pressing ctrl+o in vscode brings up file explorer as a tiled window (shouldn't it be implicit floating?)
+- respect client's min width/height when changing master split
