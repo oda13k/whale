@@ -1,9 +1,9 @@
 
 #include <stdlib.h>
-#include <whale/client/client.h>
 #include <whale/input.h>
 #include <whale/log.h>
 #include <whale/output.h>
+#include <whale/window/client.h>
 #include <whale/workspace.h>
 
 static bool wh_client_is_implicit_floating(WhaleClient* client)

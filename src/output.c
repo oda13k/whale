@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <time.h>
 #include <wayland-util.h>
-#include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/log.h>
 #include <whale/output.h>
 #include <whale/types.h>
+#include <whale/window/client.h>
 #include <wlr/backend.h>
 
 static WhaleCompositor* g_comp;
@@ -129,7 +129,7 @@ static int wh_output_init_workspaces(WhaleOutput* output)
     {
         WhaleWorkspace tmp = {0};
         VEC_PUSH(tmp, &output->workspaces);
-        wh_workspace_init(output, &VEC_AT(i, &output->workspaces));
+        // wh_workspace_init(output, &VEC_AT(i, &output->workspaces));
     }
 
     output->active_workspace = &VEC_AT(0, &output->workspaces);
@@ -191,8 +191,8 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
     WhaleCompositor* comp =
         wl_container_of(listener, comp, listeners.output_layout_change);
 
-    VEC_FOR_EACH (output, &comp->outputs)
-        wh_workspace_arrange((*output)->active_workspace);
+    // VEC_FOR_EACH (output, &comp->outputs)
+    //     wh_workspace_arrange((*output)->active_workspace);
 
     struct wlr_box scene_geom;
     wlr_output_layout_get_box(comp->output_layout, NULL, &scene_geom);
@@ -292,7 +292,7 @@ int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
 
     TODO_LOG("workspace");
 
-    wh_workspace_arrange(output->active_workspace);
+    // wh_workspace_arrange(output->active_workspace);
     return 0;
 }
 

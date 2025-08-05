@@ -1,9 +1,9 @@
 
-#include <whale/client/client.h>
 #include <whale/input.h>
 #include <whale/input/keyboard.h>
 #include <whale/log.h>
 #include <whale/utils.h>
+#include <whale/window/client.h>
 #include <wlr/backend/session.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -24,9 +24,9 @@ static WhaleCompositor* g_comp;
 
 static void terminate_focused_client(void*)
 {
-    WhaleSurface* surface = wh_input_get_focused_surface();
-    if (surface)
-        wh_client_send_close(surface->parent_client);
+    // WhaleSurface* surface = wh_input_get_focused_surface();
+    // if (surface)
+    //     wh_client_send_close(surface->parent_client);
 }
 
 static void spawn_term(void*)
@@ -36,72 +36,72 @@ static void spawn_term(void*)
 
 static void inc_tiled_master_split(void*)
 {
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    if (output)
-    {
-        wh_workspace_tiling_increment_master_split(
-            0.1, wh_output_get_active_workspace(output)
-        );
-        wh_workspace_arrange(wh_output_get_active_workspace(output));
-    }
+    // if (output)
+    // {
+    //     wh_workspace_tiling_increment_master_split(
+    //         0.1, wh_output_get_active_workspace(output)
+    //     );
+    //     wh_workspace_arrange(wh_output_get_active_workspace(output));
+    // }
 }
 
 static void dec_tiled_master_split(void*)
 {
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    if (output)
-    {
-        wh_workspace_tiling_decrement_master_split(
-            0.1, wh_output_get_active_workspace(output)
-        );
-        wh_workspace_arrange(wh_output_get_active_workspace(output));
-    }
+    // if (output)
+    // {
+    //     wh_workspace_tiling_decrement_master_split(
+    //         0.1, wh_output_get_active_workspace(output)
+    //     );
+    //     wh_workspace_arrange(wh_output_get_active_workspace(output));
+    // }
 }
 
 static void inc_tiled_master_max_clients(void*)
 {
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    if (output)
-    {
-        wh_workspace_tiling_increment_master_max_clients(
-            1, wh_output_get_active_workspace(output)
-        );
-        wh_workspace_arrange(wh_output_get_active_workspace(output));
-    }
+    // if (output)
+    // {
+    //     wh_workspace_tiling_increment_master_max_clients(
+    //         1, wh_output_get_active_workspace(output)
+    //     );
+    //     wh_workspace_arrange(wh_output_get_active_workspace(output));
+    // }
 }
 
 static void dec_tiled_master_max_clients(void*)
 {
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    if (output)
-    {
-        wh_workspace_tiling_decrement_master_max_clients(
-            1, wh_output_get_active_workspace(output)
-        );
-        wh_workspace_arrange(wh_output_get_active_workspace(output));
-    }
+    // if (output)
+    // {
+    //     wh_workspace_tiling_decrement_master_max_clients(
+    //         1, wh_output_get_active_workspace(output)
+    //     );
+    //     wh_workspace_arrange(wh_output_get_active_workspace(output));
+    // }
 }
 
 static void switch_workspace(void* data)
 {
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    if (output)
-    {
-        wh_output_activate_workspace((u8)data, output);
+    // if (output)
+    // {
+    //     wh_output_activate_workspace((u8)data, output);
 
-        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-        wh_input_focus_surface_at_coords(&cursor_pos);
-    }
+    //     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    //     wh_input_focus_surface_at_coords(&cursor_pos);
+    // }
 }
 
 #define SWITCH_WORKSPACE_BINDING(_workspace)                                   \
@@ -112,31 +112,32 @@ static void switch_workspace(void* data)
 
 static void move_client_to_workspace(void* data)
 {
-    WhaleSurface* surface = wh_input_get_focused_surface();
-    if (!surface)
-        return;
+    // WhaleSurface* surface = wh_input_get_focused_surface();
+    // if (!surface)
+    //     return;
 
-    WhaleClient* client = surface->parent_client;
-    /* Sanity check: a focusable clients must have a bound workspace */
-    // FIXME: move absolute parenting client
-    WH_ASSERT(client->bound_workspace);
+    // WhaleClient* client = surface->parent_client;
+    // /* Sanity check: a focusable clients must have a bound workspace */
+    // // FIXME: move absolute parenting client
+    // WH_ASSERT(client->bound_workspace);
 
-    WhaleWorkspace* new_ws = wh_output_get_workspace(
-        (u8)data, client->bound_workspace->parent_output
-    );
+    // WhaleWorkspace* new_ws = wh_output_get_workspace(
+    //     (u8)data, client->bound_workspace->parent_output
+    // );
 
-    if (new_ws == client->bound_workspace)
-        return;
+    // if (new_ws == client->bound_workspace)
+    //     return;
 
-    WhaleWorkspace* old_ws = wh_workspace_unbind_client(client);
-    /* If the client was managed, we need to re-arrange the workspace, as this
-     * is a workspace that is focused right now */
-    if (client->layout == LAYOUT_TILING)
-        wh_workspace_arrange(old_ws);
+    // WhaleWorkspace* old_ws = wh_workspace_unbind_client(client);
+    // /* If the client was managed, we need to re-arrange the workspace, as
+    // this
+    //  * is a workspace that is focused right now */
+    // if (client->layout == LAYOUT_TILING)
+    //     wh_workspace_arrange(old_ws);
 
-    /* We don't need to arrange this workspace here, it'll get re-arranged when
-    we switch to it. (should it be the other way around?) */
-    wh_workspace_bind_client(client, new_ws);
+    // /* We don't need to arrange this workspace here, it'll get re-arranged
+    // when we switch to it. (should it be the other way around?) */
+    // wh_workspace_bind_client(client, new_ws);
 }
 
 #define MOVE_CLIENT_TO_WORKSPACE(_workspace)                                   \

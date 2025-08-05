@@ -3,6 +3,7 @@
 #define WHALE_INPUT_H
 
 #include <whale/compositor.h>
+#include <whale/window/client.h>
 #include <xkbcommon/xkbcommon.h>
 
 int wh_input_init(WhaleCompositor* comp);

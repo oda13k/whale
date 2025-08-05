@@ -38,7 +38,8 @@
 
 #define VEC_DESTROY(_vec)                                                      \
     {                                                                          \
-        free((_vec)->data);                                                    \
+        if ((_vec)->data)                                                      \
+            free((_vec)->data);                                                \
         (_vec)->data = nullptr;                                                \
         (_vec)->capacity = (_vec)->count = 0;                                  \
     }

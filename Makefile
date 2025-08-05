@@ -30,8 +30,9 @@ endif
 CFLAGS    += $(shell ${PKG_CONFIG} --cflags ${PKG_CONFIG_PKGS}) 
 LDFLAGS   += $(shell ${PKG_CONFIG} --libs ${PKG_CONFIG_PKGS})
 
-SRC       := src/main.c src/output.c src/log.c src/workspace.c \
-src/client.c src/input.c src/input/keyboard.c src/utils.c src/client/xdg.c
+SRC       := src/main.c src/output.c src/log.c \
+src/input.c src/input/keyboard.c src/utils.c src/window/xdg.c \
+src/window/client.c src/window/surface.c
 
 OBJS      := $(addprefix $(BUILD_DIR)/, $(SRC:%.c=%.c.o))
 DEPS      := $(OBJS:%.o=%.d)
