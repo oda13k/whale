@@ -27,7 +27,7 @@ upon which we do a typeof() */
 #define WH_XDG_TOPLEVEL_DATA_FROM_LISTENER(_ptr, _listener_name)               \
     (CONTAINER_OF(_ptr, WhaleXDGToplevelData, listeners._listener_name))
 
-#define XDG_DATA_FROM_SURFACE(_surf) (_surf->implementation.ctx)
+#define XDG_DATA_FROM_SURFACE(_surf) (_surf->driver.ctx)
 
 typedef struct
 {
@@ -98,18 +98,14 @@ static void xdg_toplevel_get_minmax_size(
     }
 }
 
-static void xdg_toplevel_get_internal_geometry(
-    WhaleGeometry2D* out_geom, const WhaleSurface* surface
-)
+static void xdg_toplevel_set_active(bool active, WhaleClient* client)
 {
-    WhaleXDGToplevelData* xdg_data = XDG_DATA_FROM_SURFACE(surface);
-    WH_ASSERT_DEBUG(xdg_data);
+    struct wlr_xdg_toplevel* toplevel =
+        wlr_xdg_toplevel_try_from_wlr_surface(client->surface->wlr_surface);
 
-    struct wlr_box* geom = &xdg_data->toplevel->base->geometry;
-    out_geom->x = geom->x;
-    out_geom->y = geom->y;
-    out_geom->w = geom->width;
-    out_geom->h = geom->height;
+    WH_ASSERT_DEBUG(toplevel);
+
+    wlr_xdg_toplevel_set_activated(toplevel, active);
 }
 
 static void xdg_set_decoration_mode(WhaleXDGToplevelData* xdg_data)
@@ -163,29 +159,6 @@ static void on_xdg_toplevel_set_title(struct wl_listener* listener, void*)
     wh_client_set_title(xdg_data->toplevel->title, client);
 }
 
-// static void on_xdg_toplevel_map(struct wl_listener* listener, void*)
-// {
-//     WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, map);
-
-//     wh_client_map(client);
-//     wh_workspace_init_client_layout(client);
-//     wh_workspace_arrange(client->bound_workspace);
-
-//     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-//     wh_input_focus_client_under(&cursor_pos);
-// }
-
-// static void on_xdg_toplevel_unmap(struct wl_listener* listener, void*)
-// {
-//     WhaleSurface* surface = WH_SURFACE_FROM_XDG_LISTENER(listener, unmap);
-
-//     wh_client_unmap(client);
-//     wh_workspace_arrange(client->bound_workspace);
-
-//     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-//     wh_input_focus_client_under(&cursor_pos);
-// }
-
 static void on_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
     WhaleXDGToplevelData* xdg_data =
@@ -220,13 +193,12 @@ static void on_xdg_toplevel_new(struct wl_listener*, void* data)
         exit(1);
     }
 
-    client->surface->implementation.ctx = xdg_data;
-    client->surface->implementation.set_size = xdg_toplevel_set_size;
-    client->surface->implementation.get_size = xdg_toplevel_get_size;
-    client->surface->implementation.get_minmax_size =
-        xdg_toplevel_get_minmax_size;
-    client->surface->implementation.get_internal_geom =
-        xdg_toplevel_get_internal_geometry;
+    client->driver.set_active = xdg_toplevel_set_active;
+
+    client->surface->driver.ctx = xdg_data;
+    client->surface->driver.set_size = xdg_toplevel_set_size;
+    client->surface->driver.get_size = xdg_toplevel_get_size;
+    client->surface->driver.get_minmax_size = xdg_toplevel_get_minmax_size;
 
     wh_surface_register_commit_cb(
         xdg_surface_on_commit_initial, client->surface
@@ -254,9 +226,40 @@ static void on_xdg_toplevel_new(struct wl_listener*, void* data)
     );
 }
 
+static int popup_commit(WhaleSurface* surface)
+{
+    struct wlr_xdg_popup* popup =
+        wlr_xdg_popup_try_from_wlr_surface(surface->wlr_surface);
+
+    if (popup->base->initial_commit)
+        wlr_xdg_surface_schedule_configure(popup->base);
+
+    wlr_scene_node_set_position(
+        &surface->scene_surface_tree->node,
+        popup->current.geometry.x,
+        popup->current.geometry.y
+    );
+
+    return WHALE_SURFACE_CALLBACK_OK;
+}
+
 static void on_xdg_popup_new(struct wl_listener* listener, void* data)
 {
     struct wlr_xdg_popup* xdg_popup = data;
+
+    WhaleSurface* parent_surface = xdg_popup->parent->data;
+
+    WhaleSurface* surface = wh_surface_new(
+        xdg_popup->base->surface, parent_surface->scene_surface_tree
+    );
+
+    surface->type = SURFACE_TYPE_POPUP;
+    surface->data = nullptr; /* no data for popups */
+
+    wh_surface_register_commit_cb(popup_commit, surface);
+
+    surface->parent = parent_surface;
+    VEC_PUSH(surface, &parent_surface->children);
 }
 
 static void
@@ -287,7 +290,7 @@ static void on_xdg_toplevel_decoration_new(struct wl_listener*, void* data)
 
     WhaleSurface* surface = surface_from_xdg_toplevel(decoration->toplevel);
 
-    WhaleXDGToplevelData* xdg_data = surface->implementation.ctx;
+    WhaleXDGToplevelData* xdg_data = surface->driver.ctx;
     WH_ASSERT_DEBUG(xdg_data);
 
     xdg_data->toplevel_decoration = decoration;
@@ -310,28 +313,8 @@ static void on_xdg_toplevel_decoration_new(struct wl_listener*, void* data)
 int wh_client_xdg_shell_init(WhaleCompositor* comp)
 {
     g_comp = comp;
-    /**
-     * The xdg shell is a protocol through which clients can create
-     * toplevel windows and popups.
-     *
-     * A toplevel window is just a window.
-     * A popup is well, a popup. Popups can only exist as children of a
-     * toplevel.
-     *
-     * A toplevel can be a child of another toplevel, in which case we
-     * treat it almost like a popup. An example of such a toplevel would be
-     * the window that pops up when pressing ctrl+n in gimp.
-     * Toplevels can also specify that they have fixed dimensions (i.e. can't be
-     * resized by us), but are not necessarily the child of another toplevel, in
-     * which case, again we treat them almost like popups. An example of such a
-     * toplevel would be the discord or steam startup thingy.
-     *
-     * The difference between popups and toplevels that we treat like popups
-     * is the way they are positioned. While popups specify their own position
-     * relative to their parent toplevel, popup-like toplevels' behavior can be
-     * seen in wh_client_arrange_floating().
-     */
-    g_xdg_shell = wlr_xdg_shell_create(comp->display, 3);
+
+    g_xdg_shell = wlr_xdg_shell_create(comp->display, 6);
     LISTEN(
         &g_xdg_shell->events.new_toplevel,
         &comp->listeners.xdg_new_toplevel,
@@ -345,6 +328,14 @@ int wh_client_xdg_shell_init(WhaleCompositor* comp)
     );
 
     /* This is the intended client decoration protocol. */
+    g_xdg_decoration_manager =
+        wlr_xdg_decoration_manager_v1_create(g_comp->display);
+
+    LISTEN(
+        &g_xdg_decoration_manager->events.new_toplevel_decoration,
+        &comp->listeners.xdg_new_decoration,
+        on_xdg_toplevel_decoration_new
+    );
 
     return 0;
 }

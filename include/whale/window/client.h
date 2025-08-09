@@ -23,6 +23,11 @@ typedef struct whale_client
 
     WhaleWorkspace* bound_workspace;
     WhaleLayout layout;
+
+    struct
+    {
+        void (*set_active)(bool active, struct whale_client* client);
+    } driver;
 } WhaleClient;
 
 int wh_client_ss_init(WhaleCompositor* comp);
@@ -47,5 +52,9 @@ bool wh_client_is_mapped(const WhaleClient* client);
 void wh_client_set_pos(const wh_pos2d_t* pos, WhaleClient* client);
 
 wh_pos2d_t wh_client_get_pos(WhaleClient* client);
+
+void wh_client_set_active(bool active, WhaleClient* client);
+
+WhaleClient* wh_client_from_surface(WhaleSurface* surface);
 
 #endif // !WHALE_CLIENT_CLIENT_H

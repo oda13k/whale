@@ -1,10 +1,16 @@
-#include <assert.h>
+/**
+ * Copyright Olaru Alexandru.
+ * Distributed under the MIT license.
+ *
+ * This file implements most of the input subsystem in whale. It deals with
+ * client focus behaviour and input enumeration.
+ */
+
+#include <linux/input-event-codes.h>
 #include <stdlib.h>
-#include <time.h>
 #include <whale/input.h>
 #include <whale/input/keyboard.h>
 #include <whale/log.h>
-#include <whale/utils.h>
 #include <whale/window/client.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -12,149 +18,169 @@
 
 static WhaleCompositor* g_comp;
 
-static WhaleSurface* g_focused_pointer_surface;
-static WhaleSurface* g_focused_keyboard_surface;
+static WhaleSurface* g_pointer_focus_surface;
+static WhaleSurface* g_keyboard_focus_surface;
 
-// static bool wh_input_is_surface_focused(const WhaleSurface* surface)
-// {
-//     return g_focused_surface == surface;
-// }
+static bool g_config_focus_follows_pointer = true;
 
-static int
-wh_input_focus_surface(double enter_x, double enter_y, WhaleSurface* surface)
+static void input_focus_pointer_on_surface(
+    const wh_pos2d_t* enter_coords, WhaleSurface* surface
+)
 {
-    if (g_focused_keyboard_surface == g_focused_pointer_surface &&
-        g_focused_pointer_surface == surface)
-        return 0;
+    if (surface == g_pointer_focus_surface)
+        return;
 
-    if (surface->focus_type == SURFACE_FOCUS_NONE)
-        return 0;
+    wlr_seat_pointer_notify_enter(
+        g_comp->seat, surface->wlr_surface, enter_coords->x, enter_coords->y
+    );
 
-    struct wlr_seat* seat = g_comp->seat;
+    g_pointer_focus_surface = surface;
+}
+
+static void input_focus_keyboard_on_surface(WhaleSurface* surface)
+{
+    if (surface == g_keyboard_focus_surface)
+        return;
+
+    WhaleClient* new_client = wh_client_from_surface(surface);
+    WhaleClient* old_client =
+        g_keyboard_focus_surface
+            ? wh_client_from_surface(g_keyboard_focus_surface)
+            : nullptr;
+
+    /* Toplevel client activation follows the keyboard focus */
+    if (new_client != old_client)
+    {
+        if (old_client)
+            wh_client_set_active(false, old_client);
+
+        wh_client_set_active(true, new_client);
+    }
 
     struct wlr_keyboard* keyboard =
         &g_comp->keyboard_group.wlr_keyboard_group->keyboard;
 
-    if (surface != g_focused_pointer_surface &&
-        (surface->focus_type & SURFACE_FOCUS_POINTER))
+    switch (surface->type)
     {
-        wlr_seat_pointer_notify_enter(
-            seat, surface->wlr_surface, enter_x, enter_y
+    case SURFACE_TYPE_CLIENT:
+        wlr_seat_keyboard_notify_enter(
+            g_comp->seat,
+            surface->wlr_surface,
+            keyboard->keycodes,
+            keyboard->num_keycodes,
+            &keyboard->modifiers
         );
+        break;
+
+    case SURFACE_TYPE_POPUP:
+    case SURFACE_TYPE_SUBSURFACE:
+        /* If we are a popup or subsurface we want to focus the keyboard
+        on the parent toplevel client as per spec. */
+        wlr_seat_keyboard_notify_enter(
+            g_comp->seat,
+            new_client->surface->wlr_surface,
+            keyboard->keycodes,
+            keyboard->num_keycodes,
+            &keyboard->modifiers
+        );
+        break;
+
+    default:
+        unreachable();
     }
 
-    WhaleSurface* topmost_surface = wh_surface_get_topmost_parent(surface);
+    g_keyboard_focus_surface = surface;
+}
 
-    if (surface != g_focused_keyboard_surface)
-    {
-        if (surface->focus_type & SURFACE_FOCUS_KEYBOARD)
-        {
-            wlr_seat_keyboard_notify_enter(
-                seat,
-                surface->wlr_surface,
-                keyboard->keycodes,
-                keyboard->num_keycodes,
-                &keyboard->modifiers
-            );
-            g_focused_keyboard_surface = surface;
-        }
-        else if (surface->focus_type & SURFACE_FOCUS_KEYBOARD_TOPMOST)
-        {
-            wlr_seat_keyboard_notify_enter(
-                seat,
-                topmost_surface->wlr_surface,
-                keyboard->keycodes,
-                keyboard->num_keycodes,
-                &keyboard->modifiers
-            );
-            g_focused_keyboard_surface = topmost_surface;
-        }
-    }
+static void input_unfocus_pointer_unchecked()
+{
+    wlr_seat_pointer_notify_clear_focus(g_comp->seat);
+    g_pointer_focus_surface = nullptr;
+}
+
+static void input_unfocus_keyboard_unchecked()
+{
+    WhaleSurface* topmost_surface =
+        wh_surface_get_topmost_parent(g_keyboard_focus_surface);
 
     wlr_xdg_toplevel_set_activated(
         wlr_xdg_toplevel_try_from_wlr_surface(topmost_surface->wlr_surface),
-        true
+        false
     );
 
-    return 0;
+    wlr_seat_keyboard_notify_clear_focus(g_comp->seat);
+    g_keyboard_focus_surface = nullptr;
 }
 
-static int wh_input_unfocus()
+static void handle_pointer_motion()
 {
-    // if (!g_focused_surface)
-    //     return 0;
+    wh_input_refocus(false);
 
-    // WhaleSurface* topmost_surface =
-    //     wh_surface_get_topmost_parent(g_focused_surface);
+    if (g_pointer_focus_surface)
+    {
+        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+        wh_pos2d_t surface_coords;
+        wh_surface_layout_to_surface_coords(
+            g_pointer_focus_surface, &cursor_pos, &surface_coords
+        );
 
-    // wlr_seat_keyboard_clear_focus(g_comp->seat);
-    // wlr_seat_pointer_clear_focus(g_comp->seat);
-    // wlr_xdg_toplevel_set_activated(
-    //     wlr_xdg_toplevel_try_from_wlr_surface(topmost_surface->wlr_surface),
-    //     false
-    // );
-    // g_focused_surface = nullptr;
-
-    return 0;
+        wlr_seat_pointer_notify_motion(
+            g_comp->seat,
+            wh_time_monotonic_now_ms(),
+            surface_coords.x,
+            surface_coords.y
+        );
+    }
 }
 
 static void on_cursor_motion(struct wl_listener*, void* data)
 {
     struct wlr_pointer_motion_event* ev = data;
-    struct wlr_cursor* cursor = g_comp->cursor;
 
-    /* Move the cursor to the same position */
-    wlr_cursor_move(cursor, &ev->pointer->base, ev->delta_x, ev->delta_y);
+    /* Move the cursor image to the same position */
+    wlr_cursor_move(
+        g_comp->cursor, &ev->pointer->base, ev->delta_x, ev->delta_y
+    );
 
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleSurface* surface = wh_input_focus_surface_at_coords(&cursor_pos);
-    if (surface)
-    {
-        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-        wh_pos2d_t surface_coords;
-        wh_surface_layout_to_surface_coords(
-            surface, &cursor_pos, &surface_coords
-        );
-
-        wlr_seat_pointer_notify_motion(
-            g_comp->seat,
-            wh_time_monotonic_now_ms(),
-            surface_coords.x,
-            surface_coords.y
-        );
-    }
+    handle_pointer_motion();
 }
 
 static void on_cursor_motion_absolute(struct wl_listener*, void* data)
 {
     struct wlr_pointer_motion_absolute_event* ev = data;
-    struct wlr_cursor* cursor = g_comp->cursor;
 
-    /* Set the cursor to the same position */
-    wlr_cursor_warp_absolute(cursor, &ev->pointer->base, ev->x, ev->y);
+    /* Move the cursor image to the same position */
+    wlr_cursor_warp_absolute(g_comp->cursor, &ev->pointer->base, ev->x, ev->y);
 
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    WhaleSurface* surface = wh_input_focus_surface_at_coords(&cursor_pos);
-    if (surface)
-    {
-        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-        wh_pos2d_t surface_coords;
-        wh_surface_layout_to_surface_coords(
-            surface, &cursor_pos, &surface_coords
-        );
-
-        wlr_seat_pointer_notify_motion(
-            g_comp->seat,
-            wh_time_monotonic_now_ms(),
-            surface_coords.x,
-            surface_coords.y
-        );
-    }
+    handle_pointer_motion();
 }
 
 static void on_cursor_button(struct wl_listener*, void* data)
 {
     struct wlr_pointer_button_event* ev = data;
+
+    /* If the focus doesn't follow the cursor, we focus clients by clicking on
+     * them */
+    bool clicked_client = (ev->button == BTN_LEFT || ev->button == BTN_RIGHT ||
+                           ev->button == BTN_MIDDLE) &&
+                          ev->state == WL_POINTER_BUTTON_STATE_PRESSED;
+
+    if (!g_config_focus_follows_pointer && clicked_client)
+    {
+        wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+        WhaleSurface* surface = wh_surface_get_topmost_at(&cursor_pos);
+
+        if (surface != g_keyboard_focus_surface)
+        {
+            if (surface)
+                input_focus_keyboard_on_surface(surface);
+            else
+                input_unfocus_keyboard_unchecked();
+        }
+
+        /* We'll do it windows style, and also pass this click event to the
+        client immediately after we focus it. */
+    }
 
     wlr_seat_pointer_notify_button(
         g_comp->seat, ev->time_msec, ev->button, ev->state
@@ -182,7 +208,7 @@ static void on_cursor_frame(struct wl_listener*, void*)
     wlr_seat_pointer_notify_frame(g_comp->seat);
 }
 
-static int wh_input_cursor_init(WhaleCompositor* comp)
+static int input_cursor_init(WhaleCompositor* comp)
 {
     comp->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(comp->cursor, comp->output_layout);
@@ -230,7 +256,7 @@ static int wh_input_cursor_init(WhaleCompositor* comp)
 }
 
 static int
-wh_input_pointer_init(struct wlr_pointer* pointer, WhaleCompositor* comp)
+input_pointer_init(struct wlr_pointer* pointer, WhaleCompositor* comp)
 {
     wlr_cursor_attach_input_device(comp->cursor, &pointer->base);
     return 0;
@@ -249,7 +275,7 @@ static void on_new_input(struct wl_listener* listener, void* data)
     {
     case WLR_INPUT_DEVICE_POINTER:
         struct wlr_pointer* ptr = wlr_pointer_from_input_device(dev);
-        if (wh_input_pointer_init(ptr, comp) == 0)
+        if (input_pointer_init(ptr, comp) == 0)
             seat_caps |= WL_SEAT_CAPABILITY_POINTER;
 
         break;
@@ -267,17 +293,6 @@ static void on_new_input(struct wl_listener* listener, void* data)
     }
 
     wlr_seat_set_capabilities(comp->seat, seat_caps);
-}
-
-static int wh_input_devices_init(WhaleCompositor* comp)
-{
-    LISTEN(
-        &comp->backend->events.new_input,
-        &comp->listeners.new_input,
-        on_new_input
-    );
-
-    return 0;
 }
 
 static void on_request_set_cursor(struct wl_listener* listener, void* data)
@@ -306,7 +321,7 @@ int wh_input_init(WhaleCompositor* comp)
         on_request_set_cursor
     );
 
-    int st = wh_input_cursor_init(comp);
+    int st = input_cursor_init(comp);
     if (st < 0)
         return st;
 
@@ -314,33 +329,43 @@ int wh_input_init(WhaleCompositor* comp)
     if (st < 0)
         return st;
 
-    st = wh_input_devices_init(comp);
-    if (st < 0)
-        return st;
+    LISTEN(
+        &comp->backend->events.new_input,
+        &comp->listeners.new_input,
+        on_new_input
+    );
 
     return 0;
 }
 
-WhaleSurface* wh_input_focus_surface_at_coords(const wh_pos2d_t* pos)
+WhaleSurface* wh_input_refocus(bool force_keyboard)
 {
-    /* Get the top-most node over which our cursor is currently hovering. */
-    WhaleSurface* surface = wh_surface_get_focusable_at(pos->x, pos->y);
+    wh_pos2d_t pointer_pos = wh_input_get_cursor_pos();
+    WhaleSurface* surface = wh_surface_get_topmost_at(&pointer_pos);
     if (!surface)
     {
-        /* This needs to be re-set every time in order to show up on screen
-        (?)
-         */
-        wlr_cursor_set_xcursor(
-            g_comp->cursor, g_comp->cursor_manager, "default"
-        );
-        wh_input_unfocus();
+        if (g_pointer_focus_surface)
+        {
+            input_unfocus_pointer_unchecked();
+            wlr_cursor_set_xcursor(
+                g_comp->cursor, g_comp->cursor_manager, "default"
+            );
+        }
+
+        if (g_keyboard_focus_surface &&
+            (g_config_focus_follows_pointer || force_keyboard))
+            input_unfocus_keyboard_unchecked();
+
         return nullptr;
     }
 
     wh_pos2d_t surface_coords;
-    wh_surface_layout_to_surface_coords(surface, pos, &surface_coords);
+    wh_surface_layout_to_surface_coords(surface, &pointer_pos, &surface_coords);
 
-    wh_input_focus_surface(surface_coords.x, surface_coords.y, surface);
+    input_focus_pointer_on_surface(&surface_coords, surface);
+    if (g_config_focus_follows_pointer || force_keyboard)
+        input_focus_keyboard_on_surface(surface);
+
     return surface;
 }
 

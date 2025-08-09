@@ -19,7 +19,15 @@ extern WhaleCompositor g_comp;
 static WhaleSurface*
 wh_surface_from_scene_node(const struct wlr_scene_node* node)
 {
+    WH_ASSERT_DEBUG(node->data);
     return node->data;
+}
+
+static WhaleSurface*
+wh_surface_from_wlr_surface(const struct wlr_surface* wlr_surface)
+{
+    WH_ASSERT_DEBUG(wlr_surface->data);
+    return wlr_surface->data;
 }
 
 static void wh_surface_set_on_scene_nodes(
@@ -67,8 +75,7 @@ static void on_surface_map(struct wl_listener* listener, void*)
     // wh_workspace_init_client_layout(surface->parent_client);
     // wh_workspace_arrange(surface->parent_client->bound_workspace);
 
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    // wh_input_focus_surface_at_coords(&cursor_pos);
+    wh_input_refocus(false);
 }
 
 static void on_surface_unmap(struct wl_listener* listener, void*)
@@ -77,21 +84,21 @@ static void on_surface_unmap(struct wl_listener* listener, void*)
 
     wh_surface_unmap(surface);
 
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
-    wh_input_focus_surface_at_coords(&cursor_pos);
+    wh_input_refocus(true);
 }
 
 static void on_surface_new_subsurface(struct wl_listener*, void* data)
 {
     struct wlr_subsurface* subsurface = data;
 
-    WhaleSurface* parent_surface = subsurface->parent->data;
+    WhaleSurface* parent_surface =
+        wh_surface_from_wlr_surface(subsurface->parent);
 
     WhaleSurface* surface =
         wh_surface_new(subsurface->surface, parent_surface->scene_surface_tree);
 
-    surface->focus_type =
-        SURFACE_FOCUS_POINTER | SURFACE_FOCUS_KEYBOARD_TOPMOST;
+    surface->type = SURFACE_TYPE_SUBSURFACE;
+    surface->data = nullptr; /* no data for subsurfaces */
 
     wlr_scene_node_set_position(
         &surface->scene_surface_tree->node,
@@ -116,9 +123,7 @@ void wh_surface_destroy(WhaleSurface* surface)
     VEC_DESTROY(&surface->children);
 
     if (surface->parent)
-    {
         VEC_REMOVE(surface, &surface->parent->children);
-    }
 
     UNLISTEN(&surface->listeners.commit);
     UNLISTEN(&surface->listeners.map);
@@ -210,10 +215,11 @@ void wh_surface_unmap(WhaleSurface* surface)
     wlr_scene_node_set_enabled(&surface->scene_surface_tree->node, false);
 }
 
-WhaleSurface* wh_surface_get_focusable_at(wh_coord_t x, wh_coord_t y)
+WhaleSurface* wh_surface_get_topmost_at(const wh_pos2d_t* pos)
 {
-    struct wlr_scene_node* node =
-        wlr_scene_node_at(&g_comp.root_scene->tree.node, x, y, NULL, NULL);
+    struct wlr_scene_node* node = wlr_scene_node_at(
+        &g_comp.root_scene->tree.node, pos->x, pos->y, NULL, NULL
+    );
 
     if (!node || node->type != WLR_SCENE_NODE_BUFFER)
         return nullptr;

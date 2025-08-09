@@ -27,8 +27,12 @@ int wh_client_ss_init(WhaleCompositor* comp)
 
     VEC_INIT(&g_clients);
 
-    /* This protocol is obsolete, but untill it is removed,
+    /* This protocol is obsolete, but until it is removed,
     we'll support it. */
+    wlr_server_decoration_manager_set_default_mode(
+        wlr_server_decoration_manager_create(g_comp->display),
+        WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT
+    );
 
     wh_client_xdg_shell_init(comp);
 
@@ -67,8 +71,8 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
         return nullptr;
     }
 
-    client->surface->focus_type =
-        SURFACE_FOCUS_POINTER | SURFACE_FOCUS_KEYBOARD;
+    client->surface->type = SURFACE_TYPE_CLIENT;
+    client->surface->data = client;
 
     /* Unmap the client by default */
     wh_surface_unmap(client->surface);
@@ -115,4 +119,17 @@ wh_pos2d_t wh_client_get_pos(WhaleClient* client)
 {
     return (wh_pos2d_t){.x = client->scene_tree->node.x,
                         .y = client->scene_tree->node.y};
+}
+
+void wh_client_set_active(bool active, WhaleClient* client)
+{
+    WH_ASSERT_DEBUG(client->driver.set_active);
+    client->driver.set_active(active, client);
+}
+
+WhaleClient* wh_client_from_surface(WhaleSurface* surface)
+{
+    WhaleSurface* topmost_surface = wh_surface_get_topmost_parent(surface);
+    WH_ASSERT_DEBUG(topmost_surface->type == SURFACE_TYPE_CLIENT);
+    return topmost_surface->data;
 }

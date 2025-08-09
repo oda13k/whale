@@ -42,11 +42,10 @@ struct whale_surface;
 
 typedef enum
 {
-    SURFACE_FOCUS_NONE = 0,
-    SURFACE_FOCUS_KEYBOARD = (1 << 0),
-    SURFACE_FOCUS_POINTER = (1 << 1),
-    SURFACE_FOCUS_KEYBOARD_TOPMOST = (1 << 2)
-} SurfaceFocusType;
+    SURFACE_TYPE_CLIENT = 1,
+    SURFACE_TYPE_SUBSURFACE,
+    SURFACE_TYPE_POPUP
+} SurfaceType;
 
 typedef int (*whale_surface_callback_t)(struct whale_surface* surface);
 
@@ -60,7 +59,8 @@ typedef struct whale_surface
     struct wlr_surface* wlr_surface;
     struct wlr_scene_tree* scene_surface_tree;
 
-    SurfaceFocusType focus_type;
+    SurfaceType type;
+    void* data;
 
     struct
     {
@@ -85,12 +85,8 @@ typedef struct whale_surface
             struct whale_surface* surface
         );
 
-        void (*get_internal_geom)(
-            WhaleGeometry2D* geom_out, const struct whale_surface* surface
-        );
-
         void* ctx;
-    } implementation;
+    } driver;
 
     struct
     {
@@ -109,7 +105,7 @@ void wh_surface_destroy(WhaleSurface* surface);
 void wh_surface_map(WhaleSurface* surface);
 void wh_surface_unmap(WhaleSurface* surface);
 
-WhaleSurface* wh_surface_get_focusable_at(wh_coord_t x, wh_coord_t y);
+WhaleSurface* wh_surface_get_topmost_at(const wh_pos2d_t* pos);
 
 int wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,

@@ -3,12 +3,11 @@
 #define WHALE_INPUT_H
 
 #include <whale/compositor.h>
-#include <whale/window/client.h>
-#include <xkbcommon/xkbcommon.h>
+#include <whale/window/surface.h>
 
 int wh_input_init(WhaleCompositor* comp);
 
-WhaleSurface* wh_input_focus_surface_at_coords(const wh_pos2d_t* pos);
+WhaleSurface* wh_input_refocus(bool force_keyboard);
 
 WhaleSurface* wh_input_get_focused_surface();
 
