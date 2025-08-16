@@ -1,6 +1,6 @@
 
-#ifndef _WHALE_TYPES_H
-#define _WHALE_TYPES_H
+#ifndef WHALE_TYPES_H
+#define WHALE_TYPES_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -15,30 +15,26 @@ typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
 
-typedef double wh_coord_t;
-
-typedef struct
-{
-    wh_coord_t x;
-    wh_coord_t y;
-} wh_pos2d_t;
-
 #define WH_SIZE_UNDEFINED 0
-typedef u32 wh_size_t;
-
-typedef struct
-{
-    wh_size_t w;
-    wh_size_t h;
-} wh_size2d_t;
+typedef u32 wh_dim_t;
+typedef s32 wh_coord_t;
 
 typedef struct
 {
     wh_coord_t x;
     wh_coord_t y;
+} WhalePosition2D;
 
-    wh_size_t w;
-    wh_size_t h;
+typedef struct
+{
+    wh_dim_t w;
+    wh_dim_t h;
+} WhaleSize2D;
+
+typedef struct
+{
+    WhalePosition2D pos;
+    WhaleSize2D size;
 } WhaleGeometry2D;
 
 #define LISTEN(signal, listener, cb)                                           \
@@ -46,4 +42,4 @@ typedef struct
 
 #define UNLISTEN(listener) wl_list_remove(&(listener)->link)
 
-#endif // !_WHALE_TYPES_H
+#endif // !WHALE_TYPES_H

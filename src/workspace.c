@@ -1,20 +1,20 @@
 
 #include <stdlib.h>
+#include <whale/client/client.h>
 #include <whale/input.h>
 #include <whale/log.h>
 #include <whale/output.h>
-#include <whale/window/client.h>
 #include <whale/workspace.h>
 
 static bool wh_client_is_implicit_floating(WhaleClient* client)
 {
-    wh_size2d_t min_size, max_size;
-    wh_client_get_minmax_size(&min_size, &max_size, client);
+    WhaleSize2D min_size, max_size;
+    wh_surface_get_minmax_size(&min_size, &max_size, client->surface);
 
     bool demands_size = min_size.w && max_size.h &&
                         (min_size.w == max_size.w || min_size.h == max_size.h);
 
-    return wh_client_get_parent(client) || demands_size;
+    return client->parent || demands_size;
 }
 
 void wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
@@ -43,7 +43,7 @@ int wh_workspace_set_layout(WhaleLayout layout, WhaleWorkspace* ws)
 
 int wh_workspace_init_client_layout(WhaleClient* client)
 {
-    if (!client->bound_workspace)
+    if (!client->workspace)
     {
         client->layout = LAYOUT_UNDEFINED;
         return 0;
@@ -58,7 +58,7 @@ int wh_workspace_init_client_layout(WhaleClient* client)
     wh_workspace_set_client_layout(
         wh_client_is_implicit_floating(client)
             ? LAYOUT_FLOATING
-            : client->bound_workspace->default_layout,
+            : client->workspace->default_layout,
         client
     );
     return 0;
@@ -66,7 +66,7 @@ int wh_workspace_init_client_layout(WhaleClient* client)
 
 int wh_workspace_set_client_layout(WhaleLayout new_layout, WhaleClient* client)
 {
-    if (!client->bound_workspace)
+    if (!client->workspace)
     {
         client->layout = LAYOUT_UNDEFINED;
         return -1;
@@ -81,18 +81,18 @@ int wh_workspace_set_client_layout(WhaleLayout new_layout, WhaleClient* client)
 
 int wh_workspace_bind_client_auto(WhaleClient* client)
 {
-    WH_ASSERT_DEBUG(!client->bound_workspace);
+    WH_ASSERT_SANITY(!client->workspace);
 
     /* This is either the first bound set, or we had (maybe still have) no
      outputs connected. Either way we'll try to make the output under the
      cursor the bounding output. */
-    wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     WhaleOutput* output = wh_output_get_at(&cursor_pos);
     if (!output)
         output = wh_output_get_main();
 
-    client->bound_workspace = wh_output_get_active_workspace(output);
-    VEC_PUSH(client, &client->bound_workspace->clients);
+    client->workspace = wh_output_get_active_workspace(output);
+    VEC_PUSH(client, &client->workspace->clients);
 
     return 0;
 }
@@ -100,22 +100,22 @@ int wh_workspace_bind_client_auto(WhaleClient* client)
 int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* workspace)
 {
     /* The client should not be bound to any workspace */
-    WH_ASSERT(!client->bound_workspace);
+    WH_ASSERT(!client->workspace);
 
     /* Random sanity check: The new workspace should not already include this
      * client */
     bool includes = false;
     VEC_INCLUDES(client, includes, &workspace->clients);
-    WH_ASSERT_DEBUG(!includes);
+    WH_ASSERT_SANITY(!includes);
 
-    client->bound_workspace = workspace;
+    client->workspace = workspace;
     VEC_PUSH(client, &workspace->clients);
     return 0;
 }
 
 WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
 {
-    WhaleWorkspace* ws = client->bound_workspace;
+    WhaleWorkspace* ws = client->workspace;
     if (!ws)
         return nullptr;
 
@@ -130,46 +130,40 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
 
     /* Remove the client from the bound workspace */
     VEC_REMOVE(client, &ws->clients);
-    client->bound_workspace = nullptr;
-
-    // wh_client_unmap(client);
-    TODO_LOG("unbding client from workspace");
+    client->workspace = nullptr;
 
     return ws;
 }
 
 static void wh_client_arrange_floating(WhaleClient* client)
 {
-    if (!client->bound_workspace)
+    if (!client->workspace)
         return;
 
     WhaleGeometry2D bound_geom;
-
-    WhaleClient* parent = wh_client_get_parent(client);
-    if (parent)
+    if (client->parent)
     {
         /* If the client has a parent, we position it center
         relative to it's parent. */
-        bound_geom = wh_client_get_external_geometry(parent);
+        wh_client_get_geometry(&bound_geom, client->parent);
     }
     else
     {
         /* If the client has no parent, we position it center
         relative to the output. */
-        bound_geom =
-            wh_output_get_geometry(client->bound_workspace->parent_output);
+        wh_output_get_geometry(&bound_geom, client->workspace->parent_output);
     }
 
-    wh_pos2d_t cur_pos = wh_client_get_pos(client);
-    wh_size2d_t cur_size = wh_surface_get_size(&client->surface);
+    WhaleGeometry2D cur_geom;
+    wh_client_get_geometry(&cur_geom, client);
 
-    wh_pos2d_t target_pos = {
-        .x = bound_geom.x + bound_geom.w / 2 - cur_size.w / 2,
-        .y = bound_geom.y + bound_geom.h / 2 - cur_size.h / 2
+    WhalePosition2D new_pos = {
+        .x = bound_geom.pos.x + bound_geom.size.w / 2 - cur_geom.size.w / 2,
+        .y = bound_geom.pos.y + bound_geom.size.h / 2 - cur_geom.size.h / 2
     };
 
-    if (cur_pos.x != target_pos.x || cur_pos.y != target_pos.y)
-        wh_client_set_pos(&target_pos, client);
+    if (cur_geom.pos.x != new_pos.x || cur_geom.pos.y != new_pos.y)
+        wh_client_set_pos(&new_pos, client);
 }
 
 static void wh_client_arrange_tiled(
@@ -179,20 +173,19 @@ static void wh_client_arrange_tiled(
     WhaleClient* client
 )
 {
-    if (!client->bound_workspace)
+    if (!client->workspace)
         return;
 
-    WhaleGeometry2D bounds =
-        wh_output_get_geometry(client->bound_workspace->parent_output);
+    WhaleGeometry2D bounds;
+    wh_output_get_geometry(&bounds, client->workspace->parent_output);
 
-    wh_pos2d_t pos;
-    wh_size2d_t size;
+    WhaleGeometry2D new_geom;
 
     /* FIXME: horrible math, there mest be a cleaner way of doing this */
     if (tile_order < ctx->master_client_count)
     {
-        size.w = roundf(
-            bounds.w *
+        new_geom.size.w = roundf(
+            bounds.size.w *
             (tiled_clients_on_output > ctx->master_client_count
                  ? ctx->master_split_factor
                  : 1) /
@@ -200,10 +193,10 @@ static void wh_client_arrange_tiled(
                         ? ctx->master_client_count
                         : tiled_clients_on_output)
         );
-        size.h = bounds.h;
+        new_geom.size.h = bounds.size.h;
 
-        pos.x = bounds.x + size.w * tile_order;
-        pos.y = bounds.y;
+        new_geom.pos.x = bounds.pos.x + new_geom.size.w * tile_order;
+        new_geom.pos.y = bounds.pos.y;
     }
     else
     {
@@ -213,25 +206,28 @@ static void wh_client_arrange_tiled(
         const float split_factor =
             (ctx->master_client_count > 0) * ctx->master_split_factor;
 
-        size.w = roundf(bounds.w * (1 - split_factor));
-        size.h = roundf(bounds.h / secondary_clients);
+        new_geom.size.w = roundf(bounds.size.w * (1 - split_factor));
+        new_geom.size.h = roundf(bounds.size.h / secondary_clients);
 
-        pos.x = bounds.x + roundf(bounds.w * split_factor);
-        pos.y = bounds.y + size.h * (tile_order - ctx->master_client_count);
+        new_geom.pos.x = bounds.pos.x + roundf(bounds.size.w * split_factor);
+        new_geom.pos.y =
+            bounds.pos.y +
+            new_geom.size.h * (tile_order - ctx->master_client_count);
     }
 
-    wh_pos2d_t cur_pos = wh_client_get_pos(client);
-    wh_size2d_t cur_size = wh_surface_get_size(&client->surface);
+    WhaleGeometry2D cur_geom;
+    wh_client_get_geometry(&cur_geom, client);
 
-    bool pos_changed = cur_pos.x != pos.x || cur_pos.y != pos.y;
-    bool size_changed = cur_size.w != size.w || cur_size.h != size.h;
+    bool pos_changed =
+        cur_geom.pos.x != new_geom.pos.x || cur_geom.pos.y != new_geom.pos.y;
+    bool size_changed = cur_geom.size.w != new_geom.size.w ||
+                        cur_geom.size.h != new_geom.size.h;
 
-    if (pos_changed && size_changed)
-        wh_client_set_pos_and_size_atomic(&pos, &size, client);
-    else if (size_changed)
-        wh_surface_set_size(&size, &client->surface);
-    else if (pos_changed)
-        wh_client_set_pos(&pos, client);
+    if (size_changed)
+        wh_surface_set_size(&new_geom.size, client->surface);
+
+    if (pos_changed)
+        wh_client_set_pos(&new_geom.pos, client);
 }
 
 void wh_workspace_arrange(WhaleWorkspace* ws)

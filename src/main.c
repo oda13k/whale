@@ -4,13 +4,13 @@
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
+#include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/input.h>
 #include <whale/log.h>
 #include <whale/output.h>
 #include <whale/types.h>
 #include <whale/utils.h>
-#include <whale/window/client.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_compositor.h>

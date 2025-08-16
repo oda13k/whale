@@ -1,14 +1,14 @@
 
 #define WLR_USE_UNSTABLE
+#include "xdg_shell.h"
 #include <signal.h>
 #include <stdlib.h>
+#include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/input.h>
 #include <whale/log.h>
 #include <whale/types.h>
 #include <whale/utils.h>
-#include <whale/window/client.h>
-#include <whale/window/xdg.h>
 #include <wlr/types/wlr_server_decoration.h>
 
 #define CONTAINER_OF(_ptr, _sample_type, _member)                              \
@@ -39,9 +39,9 @@ int wh_client_ss_init(WhaleCompositor* comp)
     return 0;
 }
 
-void wh_client_ss_destroy(WhaleCompositor* comp)
+void wh_client_ss_destroy()
 {
-    wh_client_xdg_shell_destroy(comp);
+    wh_client_xdg_shell_destroy();
 }
 
 WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
@@ -75,10 +75,10 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     client->surface->data = client;
 
     /* Unmap the client by default */
-    wh_surface_unmap(client->surface);
+    wh_client_unmap(client);
 
     /* Bind the client to an output (if any) */
-    // wh_workspace_bind_client_auto(client);
+    wh_workspace_bind_client_auto(client);
 
     /* Keep track of this client */
     VEC_PUSH(client, &g_clients);
@@ -88,19 +88,27 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
 
 void wh_client_destroy(WhaleClient* client)
 {
+    VEC_REMOVE(client, &g_clients);
+
     /* We don't arrange the workspace here, it was already re-arranged when the
      * client was unmapped before getting destoryed. */
-    // wh_workspace_unbind_client(client);
+    wh_workspace_unbind_client(client);
 
     wh_surface_destroy(client->surface);
+
     wlr_scene_node_destroy(&client->scene_tree->node);
+
     free(client);
-    VEC_REMOVE(client, &g_clients);
 }
 
-void wh_client_set_title(const char* title, WhaleClient* client)
+void wh_client_map(WhaleClient* client)
 {
-    client->title = title;
+    wlr_scene_node_set_enabled(&client->scene_tree->node, true);
+}
+
+void wh_client_unmap(WhaleClient* client)
+{
+    wlr_scene_node_set_enabled(&client->scene_tree->node, false);
 }
 
 bool wh_client_is_mapped(const WhaleClient* client)
@@ -109,27 +117,34 @@ bool wh_client_is_mapped(const WhaleClient* client)
 }
 
 /* Utilities */
-void wh_client_set_pos(const wh_pos2d_t* pos, WhaleClient* client)
+void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
 {
     // FIXME: this is the client node, but we map/unmap the surface node.
     wlr_scene_node_set_position(&client->scene_tree->node, pos->x, pos->y);
 }
 
-wh_pos2d_t wh_client_get_pos(WhaleClient* client)
+void wh_client_get_pos(WhalePosition2D* out_pos, WhaleClient* client)
 {
-    return (wh_pos2d_t){.x = client->scene_tree->node.x,
-                        .y = client->scene_tree->node.y};
+    out_pos->x = client->scene_tree->node.x;
+    out_pos->y = client->scene_tree->node.y;
+}
+
+void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client)
+{
+    client->surface->driver.get_size(&out_geom->size, client->surface);
+    wh_client_get_pos(&out_geom->pos, client);
 }
 
 void wh_client_set_active(bool active, WhaleClient* client)
 {
-    WH_ASSERT_DEBUG(client->driver.set_active);
+    WH_ASSERT_SANITY(client->driver.set_active);
     client->driver.set_active(active, client);
 }
 
 WhaleClient* wh_client_from_surface(WhaleSurface* surface)
 {
     WhaleSurface* topmost_surface = wh_surface_get_topmost_parent(surface);
-    WH_ASSERT_DEBUG(topmost_surface->type == SURFACE_TYPE_CLIENT);
+    WH_ASSERT_SANITY(topmost_surface->type == SURFACE_TYPE_CLIENT);
+    WH_ASSERT_SANITY(topmost_surface->data);
     return topmost_surface->data;
 }

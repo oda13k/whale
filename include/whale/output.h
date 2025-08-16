@@ -28,11 +28,11 @@ typedef struct whale_output
 
 int wh_output_ss_init(struct whale_compositor* comp);
 
-WhaleOutput* wh_output_get_at(const wh_pos2d_t* pos);
+WhaleOutput* wh_output_get_at(const WhalePosition2D* pos);
 
 WhaleOutput* wh_output_get_main();
 
-WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output);
+void wh_output_get_geometry(WhaleGeometry2D* out_geom, WhaleOutput* output);
 
 int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output);
 

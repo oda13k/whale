@@ -1,11 +1,19 @@
 
+#include <whale/client/client.h>
 #include <whale/input.h>
 #include <whale/input/keyboard.h>
 #include <whale/log.h>
 #include <whale/utils.h>
-#include <whale/window/client.h>
 #include <wlr/backend/session.h>
 #include <xkbcommon/xkbcommon.h>
+
+// #define KEYBOARD_DECLARE_CONFIG_BINDING(_binding_name, _binding, _callback)    \
+//     CONFIG_DECLARE_OPTION(                                                     \
+//         "keyboard.bindings", _binding_name, "string", _binding, _callback      \
+//     )
+
+// KEYBOARD_DECLARE_CONFIG_BINDING("close-client", "$mod+shift+c",
+// on_client_close)
 
 static const struct xkb_rule_names g_static_xkb_rules = {
     /* can specify fields: rules, model, layout, variant, options */
@@ -36,7 +44,7 @@ static void spawn_term(void*)
 
 static void inc_tiled_master_split(void*)
 {
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
     // if (output)
@@ -50,7 +58,7 @@ static void inc_tiled_master_split(void*)
 
 static void dec_tiled_master_split(void*)
 {
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
     // if (output)
@@ -64,7 +72,7 @@ static void dec_tiled_master_split(void*)
 
 static void inc_tiled_master_max_clients(void*)
 {
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
     // if (output)
@@ -78,7 +86,7 @@ static void inc_tiled_master_max_clients(void*)
 
 static void dec_tiled_master_max_clients(void*)
 {
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
     // if (output)
@@ -92,14 +100,14 @@ static void dec_tiled_master_max_clients(void*)
 
 static void switch_workspace(void* data)
 {
-    // wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
     // if (output)
     // {
     //     wh_output_activate_workspace((u8)data, output);
 
-    //     wh_pos2d_t cursor_pos = wh_input_get_cursor_pos();
+    //     WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     //     wh_input_focus_surface_at_coords(&cursor_pos);
     // }
 }
@@ -119,13 +127,13 @@ static void move_client_to_workspace(void* data)
     // WhaleClient* client = surface->parent_client;
     // /* Sanity check: a focusable clients must have a bound workspace */
     // // FIXME: move absolute parenting client
-    // WH_ASSERT(client->bound_workspace);
+    // WH_ASSERT(client->workspace);
 
     // WhaleWorkspace* new_ws = wh_output_get_workspace(
-    //     (u8)data, client->bound_workspace->parent_output
+    //     (u8)data, client->workspace->parent_output
     // );
 
-    // if (new_ws == client->bound_workspace)
+    // if (new_ws == client->workspace)
     //     return;
 
     // WhaleWorkspace* old_ws = wh_workspace_unbind_client(client);
@@ -322,7 +330,7 @@ int wh_input_keyboard_ss_init(WhaleCompositor* comp)
     xkb_context_unref(xkb_context);
 
     wlr_keyboard_set_repeat_info(
-        &comp->keyboard_group.wlr_keyboard_group->keyboard, 25, 400
+        &comp->keyboard_group.wlr_keyboard_group->keyboard, 25, 300
     );
     comp->keyboard_group.key_repeat_source = wl_event_loop_add_timer(
         wl_display_get_event_loop(comp->display),

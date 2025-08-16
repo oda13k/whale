@@ -2,6 +2,7 @@
 #ifndef WHALE_VECTOR_H
 #define WHALE_VECTOR_H
 
+#include <stdlib.h>
 #include <whale/types.h>
 #include <whale/utils.h>
 

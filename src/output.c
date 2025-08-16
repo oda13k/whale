@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <time.h>
 #include <wayland-util.h>
+#include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/log.h>
 #include <whale/output.h>
 #include <whale/types.h>
-#include <whale/window/client.h>
 #include <wlr/backend.h>
 
 static WhaleCompositor* g_comp;
@@ -129,7 +129,7 @@ static int wh_output_init_workspaces(WhaleOutput* output)
     {
         WhaleWorkspace tmp = {0};
         VEC_PUSH(tmp, &output->workspaces);
-        // wh_workspace_init(output, &VEC_AT(i, &output->workspaces));
+        wh_workspace_init(output, &VEC_AT(i, &output->workspaces));
     }
 
     output->active_workspace = &VEC_AT(0, &output->workspaces);
@@ -191,8 +191,8 @@ static void on_output_layout_change(struct wl_listener* listener, void*)
     WhaleCompositor* comp =
         wl_container_of(listener, comp, listeners.output_layout_change);
 
-    // VEC_FOR_EACH (output, &comp->outputs)
-    //     wh_workspace_arrange((*output)->active_workspace);
+    VEC_FOR_EACH (output, &comp->outputs)
+        wh_workspace_arrange((*output)->active_workspace);
 
     struct wlr_box scene_geom;
     wlr_output_layout_get_box(comp->output_layout, NULL, &scene_geom);
@@ -235,7 +235,7 @@ int wh_output_ss_init(WhaleCompositor* comp)
     return 0;
 }
 
-WhaleOutput* wh_output_get_at(const wh_pos2d_t* pos)
+WhaleOutput* wh_output_get_at(const WhalePosition2D* pos)
 {
     struct wlr_output* output =
         wlr_output_layout_output_at(g_comp->output_layout, pos->x, pos->y);
@@ -253,15 +253,17 @@ WhaleOutput* wh_output_get_main()
     );
 }
 
-WhaleGeometry2D wh_output_get_geometry(WhaleOutput* output)
+void wh_output_get_geometry(WhaleGeometry2D* out_geom, WhaleOutput* output)
 {
     struct wlr_box geom;
     wlr_output_layout_get_box(
         output->comp->output_layout, output->wlr_output, &geom
     );
-    return (WhaleGeometry2D){
-        .x = geom.x, .y = geom.y, .w = geom.width, .h = geom.height
-    };
+
+    out_geom->pos.x = geom.x;
+    out_geom->pos.y = geom.y;
+    out_geom->size.w = geom.width;
+    out_geom->size.h = geom.height;
 }
 
 WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output)
@@ -283,16 +285,14 @@ int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
     if (output->active_workspace == &VEC_AT(workspace_idx, &output->workspaces))
         return 0;
 
-    // VEC_FOR_EACH (client, &output->active_workspace->clients)
-    //     wh_client_unmap(*client);
+    VEC_FOR_EACH (client, &output->active_workspace->clients)
+        wh_client_unmap(*client);
 
-    // output->active_workspace = &VEC_AT(workspace_idx, &output->workspaces);
-    // VEC_FOR_EACH (client, &output->active_workspace->clients)
-    //     wh_client_map(*client);
+    output->active_workspace = &VEC_AT(workspace_idx, &output->workspaces);
+    VEC_FOR_EACH (client, &output->active_workspace->clients)
+        wh_client_map(*client);
 
-    TODO_LOG("workspace");
-
-    // wh_workspace_arrange(output->active_workspace);
+    wh_workspace_arrange(output->active_workspace);
     return 0;
 }
 

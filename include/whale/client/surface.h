@@ -27,8 +27,8 @@
  * which they're created :^)
  */
 
-#ifndef WHALE_WINDOW_SURFACE_H
-#define WHALE_WINDOW_SURFACE_H
+#ifndef WHALE_CLIENT_SURFACE_H
+#define WHALE_CLIENT_SURFACE_H
 
 #define WLR_USE_UNSTABLE
 #include <wayland-server-core.h>
@@ -42,12 +42,15 @@ struct whale_surface;
 
 typedef enum
 {
-    SURFACE_TYPE_CLIENT = 1,
+    SURFACE_TYPE_UNKNOWN,
+    SURFACE_TYPE_CLIENT,
     SURFACE_TYPE_SUBSURFACE,
     SURFACE_TYPE_POPUP
 } SurfaceType;
 
 typedef int (*whale_surface_callback_t)(struct whale_surface* surface);
+#define WH_SURFACE_CALLBACK(_name, _surf_arg_name)                             \
+    static int _name(WhaleSurface* _surf_arg_name)
 
 typedef struct whale_surface
 {
@@ -74,14 +77,14 @@ typedef struct whale_surface
     struct
     {
         void (*set_size)(
-            const wh_size2d_t* size, struct whale_surface* surface
+            const WhaleSize2D* size, struct whale_surface* surface
         );
 
-        void (*get_size)(wh_size2d_t* out_size, struct whale_surface* surface);
+        void (*get_size)(WhaleSize2D* out_size, struct whale_surface* surface);
 
         void (*get_minmax_size)(
-            wh_size2d_t* min_size,
-            wh_size2d_t* max_size,
+            WhaleSize2D* min_size,
+            WhaleSize2D* max_size,
             struct whale_surface* surface
         );
 
@@ -90,9 +93,10 @@ typedef struct whale_surface
 
     struct
     {
-        VEC(whale_surface_callback_t) commit_callbacks;
         VEC(whale_surface_callback_t) map_callbacks;
         VEC(whale_surface_callback_t) unmap_callbacks;
+        VEC(whale_surface_callback_t) commit_callbacks;
+        VEC(whale_surface_callback_t) destroy_callbacks;
     } callbacks;
 } WhaleSurface;
 
@@ -105,12 +109,22 @@ void wh_surface_destroy(WhaleSurface* surface);
 void wh_surface_map(WhaleSurface* surface);
 void wh_surface_unmap(WhaleSurface* surface);
 
-WhaleSurface* wh_surface_get_topmost_at(const wh_pos2d_t* pos);
+void wh_surface_set_size(const WhaleSize2D* size, WhaleSurface* surface);
+void wh_surface_get_size(WhaleSize2D* out_size, WhaleSurface* surface);
+void wh_surface_get_minmax_size(
+    WhaleSize2D* out_min_size, WhaleSize2D* out_max_size, WhaleSurface* surface
+);
+
+void wh_surface_set_position_relative(
+    const WhalePosition2D* pos, WhaleSurface* surface
+);
+
+WhaleSurface* wh_surface_get_topmost_at(const WhalePosition2D* pos);
 
 int wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,
-    const wh_pos2d_t* layout_coords,
-    wh_pos2d_t* surface_coords
+    const WhalePosition2D* layout_coords,
+    WhalePosition2D* surface_coords
 );
 
 void wh_surface_register_commit_cb(
@@ -119,4 +133,7 @@ void wh_surface_register_commit_cb(
 
 WhaleSurface* wh_surface_get_topmost_parent(WhaleSurface* surface);
 
-#endif // !WHALE_WINDOW_SURFACE_H
+WhaleSurface*
+wh_surface_from_wlr_surface(const struct wlr_surface* wlr_surface);
+
+#endif // !WHALE_CLIENT_SURFACE_H

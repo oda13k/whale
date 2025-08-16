@@ -8,14 +8,17 @@ INCLUDE_DIR                         := include
 LOCAL_WAYLAND_PROTOCOLS_DIR         := wayland_protocols
 LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR := $(BUILD_DIR)/generated/$(LOCAL_WAYLAND_PROTOCOLS_DIR)
 
-WAYLAND_PROTOCOLS_DIR = $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
-WAYLAND_SCANNER       = $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
+WAYLAND_PROTOCOLS_DIR := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
+WAYLAND_SCANNER       := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
 
-PKG_CONFIG_PKGS       = wayland-server wlroots-0.19 xkbcommon
+PKG_CONFIG_PKGS       := wayland-server wlroots-0.19 xkbcommon
 
 TARGET    := debug
 
-CFLAGS    := -MD -MP -Wall -Wextra -Wimplicit-function-declaration -std=c23 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) -fdiagnostics-color=always -D_POSIX_C_SOURCE=200809L
+CFLAGS    := -MD -MP -Wall -Wextra -Wimplicit-function-declaration -std=c23 \
+-I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) \
+-fdiagnostics-color=always -D_POSIX_C_SOURCE=200809L
+
 LDFLAGS   := -lm
 
 ifeq ($(TARGET),debug)
@@ -31,8 +34,9 @@ CFLAGS    += $(shell ${PKG_CONFIG} --cflags ${PKG_CONFIG_PKGS})
 LDFLAGS   += $(shell ${PKG_CONFIG} --libs ${PKG_CONFIG_PKGS})
 
 SRC       := src/main.c src/output.c src/log.c \
-src/input.c src/input/keyboard.c src/utils.c src/window/xdg.c \
-src/window/client.c src/window/surface.c
+src/input.c src/input/keyboard.c src/utils.c \
+src/client/client.c src/client/surface.c src/workspace.c \
+src/client/xdg_shell.c
 
 OBJS      := $(addprefix $(BUILD_DIR)/, $(SRC:%.c=%.c.o))
 DEPS      := $(OBJS:%.o=%.d)

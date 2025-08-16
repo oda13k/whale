@@ -1,5 +1,3 @@
-- factor out wlr_surface events from xdg into client
-- add popup windows
 - xwayland
 - figure out why copy-paste doesn't work between windows
 - add way to quit whale

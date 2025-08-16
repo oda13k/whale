@@ -7,10 +7,10 @@
 
 #define WH_ASSERT(expr) wh_assert(expr, #expr, __FILE__, __LINE__)
 
-#if WHALE_TARGET == debug
-#define WH_ASSERT_DEBUG(_expr) wh_assert(_expr, #_expr, __FILE__, __LINE__)
+#if WHALE_TARGET == dwdw
+#define WH_ASSERT_SANITY(_expr) wh_assert(_expr, #_expr, __FILE__, __LINE__)
 #else
-#define WH_ASSERT_DEBUG(_expr)
+#define WH_ASSERT_SANITY(_expr)
 #endif
 
 void wh_assert(bool expr, const char* str_expr, const char* file, size_t line);

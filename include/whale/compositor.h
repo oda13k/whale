@@ -49,10 +49,6 @@ typedef struct whale_compositor
         struct wl_listener new_output;
         struct wl_listener output_layout_change;
 
-        struct wl_listener xdg_new_toplevel;
-        struct wl_listener xdg_new_popup;
-        struct wl_listener xdg_new_decoration;
-
         struct wl_listener cursor_motion;
         struct wl_listener cursor_motion_absolute;
         struct wl_listener cursor_button;
