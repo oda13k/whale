@@ -215,6 +215,19 @@ static void xdg_toplevel_set_active(bool active, WhaleClient* client)
     wlr_xdg_toplevel_set_activated(xdg_data->toplevel, active);
 }
 
+static WhaleClient* xdg_toplevel_get_parent(WhaleClient* client)
+{
+    WhaleXDGToplevelData* xdg_data =
+        XDG_TOPLEVEL_DATA_FROM_SURFACE(client->surface);
+
+    if (!xdg_data->toplevel->parent)
+        return nullptr;
+
+    return wh_client_from_surface(
+        wh_surface_from_wlr_surface(xdg_data->toplevel->parent->base->surface)
+    );
+}
+
 WH_SURFACE_CALLBACK(xdg_toplevel_on_initial_commit, surface)
 {
     WhaleXDGToplevelData* xdg_data = XDG_TOPLEVEL_DATA_FROM_SURFACE(surface);
@@ -323,6 +336,7 @@ static void on_xdg_toplevel_new(struct wl_listener*, void* data)
     /* Client drivers, stuff that only makes sense to have on clients and not on
      * all surfaces. */
     client->driver.set_active = xdg_toplevel_set_active;
+    client->driver.get_parent = xdg_toplevel_get_parent;
 
     /* Surface drivers, stuff you'd expect to be able to call on any type of
      * surface. */

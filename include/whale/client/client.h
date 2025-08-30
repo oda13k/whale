@@ -16,15 +16,15 @@ typedef struct whale_client
     WhaleSurface* surface;
     struct wlr_scene_tree* scene_tree;
 
-    struct whale_client* parent;
-    VEC(struct whale_client*) children;
-
     WhaleWorkspace* workspace;
     WhaleLayout layout;
+
+    bool requested_map;
 
     struct
     {
         void (*set_active)(bool active, struct whale_client* client);
+        struct whale_client* (*get_parent)(struct whale_client* client);
     } driver;
 } WhaleClient;
 
@@ -43,6 +43,8 @@ void wh_client_get_pos(WhalePosition2D* out_pos, WhaleClient* client);
 void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client);
 
 void wh_client_set_active(bool active, WhaleClient* client);
+
+WhaleClient* wh_client_get_parent(WhaleClient* client);
 
 WhaleClient* wh_client_from_surface(WhaleSurface* surface);
 

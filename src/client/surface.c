@@ -49,15 +49,14 @@ static void on_surface_map(struct wl_listener* listener, void*)
     WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, map);
     wh_surface_map(surface);
 
-    if (surface->type == SURFACE_TYPE_CLIENT)
+    VEC_FOR_EACH (cb, &surface->callbacks.map_callbacks)
     {
-        WhaleClient* client = wh_client_from_surface(surface);
-        wh_client_map(client);
-        wh_workspace_init_client_layout(client);
-        wh_workspace_arrange(client->workspace);
+        if ((*cb)(surface) == WHALE_SURFACE_CALLBACK_REMOVE_SELF)
+        {
+            VEC_REMOVE(*cb, &surface->callbacks.map_callbacks);
+            --cb;
+        }
     }
-
-    wh_input_refocus(false);
 }
 
 static void on_surface_unmap(struct wl_listener* listener, void*)
@@ -65,14 +64,14 @@ static void on_surface_unmap(struct wl_listener* listener, void*)
     WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, unmap);
     wh_surface_unmap(surface);
 
-    if (surface->type == SURFACE_TYPE_CLIENT)
+    VEC_FOR_EACH (cb, &surface->callbacks.unmap_callbacks)
     {
-        WhaleClient* client = wh_client_from_surface(surface);
-        wh_client_unmap(client);
-        wh_workspace_arrange(client->workspace);
+        if ((*cb)(surface) == WHALE_SURFACE_CALLBACK_REMOVE_SELF)
+        {
+            VEC_REMOVE(*cb, &surface->callbacks.unmap_callbacks);
+            --cb;
+        }
     }
-
-    wh_input_refocus(true);
 }
 
 static void on_surface_new_subsurface(struct wl_listener*, void* data)
@@ -288,12 +287,48 @@ void wh_surface_register_commit_cb(
     {
         wh_log(
             DEBUG,
-            "surface: Tried to register the same commit callback multime times."
+            "surface: Tried to register the same commit callback multiple times."
         );
         return;
     }
 
     VEC_PUSH(cb, &surface->callbacks.commit_callbacks);
+}
+
+void wh_surface_register_map_cb(
+    whale_surface_callback_t cb, WhaleSurface* surface
+)
+{
+    bool includes = false;
+    VEC_INCLUDES(cb, includes, &surface->callbacks.map_callbacks);
+    if (includes)
+    {
+        wh_log(
+            DEBUG,
+            "surface: Tried to register the same map callback multiple times."
+        );
+        return;
+    }
+
+    VEC_PUSH(cb, &surface->callbacks.map_callbacks);
+}
+
+void wh_surface_register_unmap_cb(
+    whale_surface_callback_t cb, WhaleSurface* surface
+)
+{
+    bool includes = false;
+    VEC_INCLUDES(cb, includes, &surface->callbacks.unmap_callbacks);
+    if (includes)
+    {
+        wh_log(
+            DEBUG,
+            "surface: Tried to register the same unmap callback multiple times."
+        );
+        return;
+    }
+
+    VEC_PUSH(cb, &surface->callbacks.unmap_callbacks);
 }
 
 WhaleSurface* wh_surface_get_topmost_parent(WhaleSurface* surface)

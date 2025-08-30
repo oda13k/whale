@@ -15,6 +15,7 @@
 // KEYBOARD_DECLARE_CONFIG_BINDING("close-client", "$mod+shift+c",
 // on_client_close)
 
+
 static const struct xkb_rule_names g_static_xkb_rules = {
     /* can specify fields: rules, model, layout, variant, options */
     /* example:
@@ -28,21 +29,21 @@ static WhaleCompositor* g_comp;
 #define MOD_NORMAL WLR_MODIFIER_LOGO
 #define MOD_IMPORTANT (MOD_NORMAL | WLR_MODIFIER_SHIFT)
 
-#define MODS_DISCARD_CAPS(mods) (mods & (~WLR_MODIFIER_CAPS))
+#define MODS_DISCARD_CAPS(_mods) (_mods & (~WLR_MODIFIER_CAPS))
 
-static void terminate_focused_client(void*)
+static void terminate_focused_client(const BindingArg*)
 {
     // WhaleSurface* surface = wh_input_get_focused_surface();
     // if (surface)
     //     wh_client_send_close(surface->parent_client);
 }
 
-static void spawn_term(void*)
+static void spawn_term(const BindingArg*)
 {
     wh_spawn_process("/bin/alacritty");
 }
 
-static void inc_tiled_master_split(void*)
+static void inc_tiled_master_split(const BindingArg*)
 {
     // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
@@ -56,7 +57,7 @@ static void inc_tiled_master_split(void*)
     // }
 }
 
-static void dec_tiled_master_split(void*)
+static void dec_tiled_master_split(const BindingArg*)
 {
     // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
@@ -70,7 +71,7 @@ static void dec_tiled_master_split(void*)
     // }
 }
 
-static void inc_tiled_master_max_clients(void*)
+static void inc_tiled_master_max_clients(const BindingArg*)
 {
     // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
@@ -84,7 +85,7 @@ static void inc_tiled_master_max_clients(void*)
     // }
 }
 
-static void dec_tiled_master_max_clients(void*)
+static void dec_tiled_master_max_clients(const BindingArg*)
 {
     // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
     // WhaleOutput* output = wh_output_get_at(&cursor_pos);
@@ -98,27 +99,25 @@ static void dec_tiled_master_max_clients(void*)
     // }
 }
 
-static void switch_workspace(void* data)
+static void switch_workspace(const BindingArg* arg)
 {
-    // WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
-    // WhaleOutput* output = wh_output_get_at(&cursor_pos);
+    WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
+    WhaleOutput* output = wh_output_get_at(&cursor_pos);
 
-    // if (output)
-    // {
-    //     wh_output_activate_workspace((u8)data, output);
-
-    //     WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
-    //     wh_input_focus_surface_at_coords(&cursor_pos);
-    // }
+    if (output)
+    {
+        wh_output_activate_workspace(arg->unsigned_64, output);
+        wh_input_refocus(true);
+    }
 }
 
 #define SWITCH_WORKSPACE_BINDING(_workspace)                                   \
     {.mod = MOD_NORMAL,                                                        \
      .key = XKB_KEY_##_workspace,                                              \
      .callback = switch_workspace,                                             \
-     .data = (void*)_workspace}
+     .arg = { .unsigned_64 = _workspace - 1 }} 
 
-static void move_client_to_workspace(void* data)
+static void move_client_to_workspace(const BindingArg*)
 {
     // WhaleSurface* surface = wh_input_get_focused_surface();
     // if (!surface)
@@ -152,18 +151,18 @@ static void move_client_to_workspace(void* data)
     {.mod = MOD_IMPORTANT,                                                     \
      .key = XKB_KEY_##_workspace,                                              \
      .callback = move_client_to_workspace,                                     \
-     .data = (void*)_workspace}
+     .arg = (BindingArg){ .unsigned_64 = _workspace }
 
-static void chvt(void* data)
+static void chvt(const BindingArg* arg)
 {
-    wlr_session_change_vt(g_comp->session, (u8)data);
+    wlr_session_change_vt(g_comp->session, arg->unsigned_64);
 }
 
 #define CHVT_BINDING(_vt)                                                      \
     {.mod = WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,                              \
      .key = XKB_KEY_XF86Switch_VT_##_vt,                                       \
      .callback = chvt,                                                         \
-     .data = (void*)_vt}
+     .arg = (BindingArg){ .unsigned_64 = _vt }}
 
 static const WhaleKeyboardBinding g_static_bindings[] = {
     {.mod = MOD_IMPORTANT,
@@ -186,27 +185,6 @@ static const WhaleKeyboardBinding g_static_bindings[] = {
     SWITCH_WORKSPACE_BINDING(3),
     SWITCH_WORKSPACE_BINDING(4),
     SWITCH_WORKSPACE_BINDING(5),
-
-    {.mod = MOD_IMPORTANT,
-     .key = XKB_KEY_exclam,
-     .callback = move_client_to_workspace,
-     .data = (void*)1},
-    {.mod = MOD_IMPORTANT,
-     .key = XKB_KEY_at,
-     .callback = move_client_to_workspace,
-     .data = (void*)2},
-    {.mod = MOD_IMPORTANT,
-     .key = XKB_KEY_numbersign,
-     .callback = move_client_to_workspace,
-     .data = (void*)3},
-    {.mod = MOD_IMPORTANT,
-     .key = XKB_KEY_dollar,
-     .callback = move_client_to_workspace,
-     .data = (void*)4},
-    {.mod = MOD_IMPORTANT,
-     .key = XKB_KEY_percent,
-     .callback = move_client_to_workspace,
-     .data = (void*)5},
 
     CHVT_BINDING(1),
     CHVT_BINDING(2),
@@ -253,7 +231,7 @@ static void on_keyboard_key(struct wl_listener* listener, void* data)
             {
                 if (xkb_keysym_to_lower(keys[k]) == binding->key)
                 {
-                    binding->callback(binding->data);
+                    binding->callback(&binding->arg);
                     handled = true;
                     break;
                 }

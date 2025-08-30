@@ -1,4 +1,5 @@
 
+#include "whale/workspace.h"
 #define WLR_USE_UNSTABLE
 #include <stdio.h>
 #include <stdlib.h>
@@ -273,24 +274,24 @@ WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output)
 
 int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
 {
-    /* Workspaces start from 1 and a value of 0 is invalid */
-    WH_ASSERT(workspace_idx > 0);
-    /* But internally they are 0-based indexed. */
-    --workspace_idx;
-
     size_t max_workspace_idx = VEC_GET_LENGTH(&output->workspaces) - 1;
     if (workspace_idx > max_workspace_idx)
         workspace_idx = max_workspace_idx;
 
-    if (output->active_workspace == &VEC_AT(workspace_idx, &output->workspaces))
+    WhaleWorkspace* new_workspace = &VEC_AT(workspace_idx, &output->workspaces);
+
+    if (output->active_workspace == new_workspace)
         return 0;
 
     VEC_FOR_EACH (client, &output->active_workspace->clients)
         wh_client_unmap(*client);
 
-    output->active_workspace = &VEC_AT(workspace_idx, &output->workspaces);
+    output->active_workspace = new_workspace;
     VEC_FOR_EACH (client, &output->active_workspace->clients)
-        wh_client_map(*client);
+    {
+        if ((*client)->requested_map)
+            wh_client_map(*client);
+    }
 
     wh_workspace_arrange(output->active_workspace);
     return 0;

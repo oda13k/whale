@@ -10,9 +10,6 @@ struct whale_output;
 
 typedef enum
 {
-    /* A client's layout is undefined if it's not bound to
-    an output (because maybe there are no outputs). */
-    LAYOUT_UNDEFINED,
     LAYOUT_TILING,
     LAYOUT_FLOATING,
     LAYOUT_MONOCLE
@@ -43,8 +40,6 @@ int wh_workspace_init_client_layout(struct whale_client* client);
 int wh_workspace_set_client_layout(
     WhaleLayout new_layout, struct whale_client* client
 );
-
-int wh_workspace_bind_client_auto(struct whale_client* client);
 
 int wh_workspace_bind_client(
     struct whale_client* client, WhaleWorkspace* workspace

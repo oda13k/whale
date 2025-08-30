@@ -14,7 +14,7 @@ static bool wh_client_is_implicit_floating(WhaleClient* client)
     bool demands_size = min_size.w && max_size.h &&
                         (min_size.w == max_size.w || min_size.h == max_size.h);
 
-    return client->parent || demands_size;
+    return wh_client_get_parent(client) || demands_size;
 }
 
 void wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
@@ -45,12 +45,9 @@ int wh_workspace_init_client_layout(WhaleClient* client)
 {
     if (!client->workspace)
     {
-        client->layout = LAYOUT_UNDEFINED;
+        client->layout = LAYOUT_TILING;
         return 0;
     }
-
-    if (client->layout != LAYOUT_UNDEFINED)
-        return 0;
 
     /* This is the only place where we check if a client is
     implcitely floating and adjust it accordingly. Can a client
@@ -68,7 +65,7 @@ int wh_workspace_set_client_layout(WhaleLayout new_layout, WhaleClient* client)
 {
     if (!client->workspace)
     {
-        client->layout = LAYOUT_UNDEFINED;
+        client->layout = LAYOUT_TILING;
         return -1;
     }
 
@@ -76,24 +73,6 @@ int wh_workspace_set_client_layout(WhaleLayout new_layout, WhaleClient* client)
         return 0;
 
     client->layout = new_layout;
-    return 0;
-}
-
-int wh_workspace_bind_client_auto(WhaleClient* client)
-{
-    WH_ASSERT_SANITY(!client->workspace);
-
-    /* This is either the first bound set, or we had (maybe still have) no
-     outputs connected. Either way we'll try to make the output under the
-     cursor the bounding output. */
-    WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
-    WhaleOutput* output = wh_output_get_at(&cursor_pos);
-    if (!output)
-        output = wh_output_get_main();
-
-    client->workspace = wh_output_get_active_workspace(output);
-    VEC_PUSH(client, &client->workspace->clients);
-
     return 0;
 }
 
@@ -125,9 +104,6 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
     VEC_INCLUDES(client, includes, &ws->clients);
     WH_ASSERT(includes);
 
-    /* Sanity check: We should only be unbinding from a focused workspace. */
-    WH_ASSERT(wh_output_get_active_workspace(ws->parent_output) == ws);
-
     /* Remove the client from the bound workspace */
     VEC_REMOVE(client, &ws->clients);
     client->workspace = nullptr;
@@ -140,12 +116,13 @@ static void wh_client_arrange_floating(WhaleClient* client)
     if (!client->workspace)
         return;
 
+    WhaleClient* parent = wh_client_get_parent(client);
     WhaleGeometry2D bound_geom;
-    if (client->parent)
+    if (parent)
     {
         /* If the client has a parent, we position it center
         relative to it's parent. */
-        wh_client_get_geometry(&bound_geom, client->parent);
+        wh_client_get_geometry(&bound_geom, parent);
     }
     else
     {
@@ -164,6 +141,10 @@ static void wh_client_arrange_floating(WhaleClient* client)
 
     if (cur_geom.pos.x != new_pos.x || cur_geom.pos.y != new_pos.y)
         wh_client_set_pos(&new_pos, client);
+
+    // TODO: set the client to it's min size if is floating to fix the weird
+    // gimp bug for the color picker where the size is correct but the elements
+    // inside the window are arragned as if the window had another size.
 }
 
 static void wh_client_arrange_tiled(

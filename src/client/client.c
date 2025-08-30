@@ -44,6 +44,51 @@ void wh_client_ss_destroy()
     wh_client_xdg_shell_destroy();
 }
 
+WH_SURFACE_CALLBACK(client_on_map, surface)
+{
+    WhaleClient* client = wh_client_from_surface(surface);
+
+    wh_client_map(client);
+    client->requested_map = true;
+
+    if (!client->workspace)
+    {
+        /* We bind the client to a workspace on map. When the client gets
+         * unmapped however, we don't unbind it from the workspace. Unbinding is
+         * only done when the client is destroyed (or it's workspace is
+         * destroyed because the workspace's output was disconnected.) */
+        WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
+        WhaleOutput* output = wh_output_get_at(&cursor_pos);
+        if (output)
+        {
+            wh_workspace_bind_client(
+                client, wh_output_get_active_workspace(output)
+            );
+            wh_workspace_init_client_layout(client);
+        }
+    }
+
+    if (client->workspace)
+        wh_workspace_arrange(client->workspace);
+
+    wh_input_refocus(false);
+    return WHALE_SURFACE_CALLBACK_OK;
+}
+
+WH_SURFACE_CALLBACK(client_on_unmap, surface)
+{
+    WhaleClient* client = wh_client_from_surface(surface);
+
+    wh_client_unmap(client);
+    client->requested_map = false;
+
+    if (client->workspace)
+        wh_workspace_arrange(client->workspace);
+
+    wh_input_refocus(true);
+    return WHALE_SURFACE_CALLBACK_OK;
+}
+
 WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
 {
     WhaleClient* client = calloc(1, sizeof(WhaleClient));
@@ -74,11 +119,11 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     client->surface->type = SURFACE_TYPE_CLIENT;
     client->surface->data = client;
 
+    wh_surface_register_map_cb(client_on_map, client->surface);
+    wh_surface_register_unmap_cb(client_on_unmap, client->surface);
+
     /* Unmap the client by default */
     wh_client_unmap(client);
-
-    /* Bind the client to an output (if any) */
-    wh_workspace_bind_client_auto(client);
 
     /* Keep track of this client */
     VEC_PUSH(client, &g_clients);
@@ -139,6 +184,12 @@ void wh_client_set_active(bool active, WhaleClient* client)
 {
     WH_ASSERT_SANITY(client->driver.set_active);
     client->driver.set_active(active, client);
+}
+
+WhaleClient* wh_client_get_parent(WhaleClient* client)
+{
+    WH_ASSERT_SANITY(client->driver.get_parent);
+    return client->driver.get_parent(client);
 }
 
 WhaleClient* wh_client_from_surface(WhaleSurface* surface)

@@ -131,6 +131,14 @@ void wh_surface_register_commit_cb(
     whale_surface_callback_t cb, WhaleSurface* surface
 );
 
+void wh_surface_register_map_cb(
+    whale_surface_callback_t cb, WhaleSurface* surface
+);
+
+void wh_surface_register_unmap_cb(
+    whale_surface_callback_t cb, WhaleSurface* surface
+);
+
 WhaleSurface* wh_surface_get_topmost_parent(WhaleSurface* surface);
 
 WhaleSurface*
