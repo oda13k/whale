@@ -30,9 +30,8 @@
 #ifndef WHALE_CLIENT_SURFACE_H
 #define WHALE_CLIENT_SURFACE_H
 
-#define WLR_USE_UNSTABLE
 #include <wayland-server-core.h>
-#include <whale/vector.h>
+#include <whale/utils/vector.h>
 #include <wlr/types/wlr_compositor.h>
 
 struct whale_surface;
@@ -42,7 +41,6 @@ struct whale_surface;
 
 typedef enum
 {
-    SURFACE_TYPE_UNKNOWN,
     SURFACE_TYPE_CLIENT,
     SURFACE_TYPE_SUBSURFACE,
     SURFACE_TYPE_POPUP
@@ -119,8 +117,6 @@ void wh_surface_set_position_relative(
     const WhalePosition2D* pos, WhaleSurface* surface
 );
 
-WhaleSurface* wh_surface_get_topmost_at(const WhalePosition2D* pos);
-
 int wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,
     const WhalePosition2D* layout_coords,
@@ -138,8 +134,6 @@ void wh_surface_register_map_cb(
 void wh_surface_register_unmap_cb(
     whale_surface_callback_t cb, WhaleSurface* surface
 );
-
-WhaleSurface* wh_surface_get_topmost_parent(WhaleSurface* surface);
 
 WhaleSurface*
 wh_surface_from_wlr_surface(const struct wlr_surface* wlr_surface);

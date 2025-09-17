@@ -2,27 +2,25 @@
 #ifndef WHALE_INPUT_KEYBOARD_H
 #define WHALE_INPUT_KEYBOARD_H
 
-#include <whale/compositor.h>
-#include <whale/types.h>
-
-typedef u32 wh_keyboard_mod_t;
-
-typedef union
-{
-    u64 unsigned_64;
-    char* string;
-} BindingArg;
+#include <whale/client/surface.h>
+#include <whale/input/seat.h>
 
 typedef struct
 {
-    xkb_keysym_t key;
-    wh_keyboard_mod_t mod;
-    void (*callback)(const BindingArg* arg);
-    BindingArg arg;
-} WhaleKeyboardBinding;
+    struct wlr_keyboard_group* wlr_keyboard_group;
+    struct wl_event_source* key_repeat_source;
+} KeyboardGroup;
 
-int wh_input_keyboard_ss_init(WhaleCompositor* comp);
+int wh_keyboard_init(struct wlr_seat* seat);
 
-int wh_input_keyboard_add(struct wlr_keyboard* keyboard, WhaleCompositor* comp);
+void wh_keyboard_destroy();
+
+int wh_keyboard_attach_device(struct wlr_keyboard* keyboard);
+
+void wh_keyboard_focus_surface(WhaleSurface* surface);
+
+void wh_keyboard_unfocus_unchecked();
+
+WhaleSurface* wh_keyboard_get_focused_surface();
 
 #endif // !WHALE_INPUT_KEYBOARD_H

@@ -1,64 +1,53 @@
 
-#define WLR_USE_UNSTABLE
 #include "xdg_shell.h"
-#include <signal.h>
+#include "xwayland.h"
 #include <stdlib.h>
 #include <whale/client/client.h>
 #include <whale/compositor.h>
-#include <whale/input.h>
+#include <whale/debug.h>
+#include <whale/input/pointer.h>
+#include <whale/input/seat.h>
 #include <whale/log.h>
+#include <whale/output/output.h>
+#include <whale/output/scene.h>
+#include <whale/output/workspace.h>
 #include <whale/types.h>
-#include <whale/utils.h>
 #include <wlr/types/wlr_server_decoration.h>
 
-#define CONTAINER_OF(_ptr, _sample_type, _member)                              \
-    ((_sample_type*)((char*)(_ptr) - offsetof(_sample_type, _member)))
-
-#define WH_SURFACE_FROM_SURFACE_LISTENER(_ptr, _listener_name)                 \
-    (CONTAINER_OF(_ptr, WhaleSurface, listeners._listener_name))
-
-static WhaleCompositor* g_comp;
-
+// TODO: maybe move this into scene.c
 static VEC(WhaleClient*) g_clients;
 
-int wh_client_ss_init(WhaleCompositor* comp)
+int wh_client_ss_init()
 {
-    g_comp = comp;
-
     VEC_INIT(&g_clients);
 
     /* This protocol is obsolete, but until it is removed,
     we'll support it. */
     wlr_server_decoration_manager_set_default_mode(
-        wlr_server_decoration_manager_create(g_comp->display),
-        WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT
+        wlr_server_decoration_manager_create(wh_compositor_get_wl_display()),
+        WLR_SERVER_DECORATION_MANAGER_MODE_SERVER
     );
 
-    wh_client_xdg_shell_init(comp);
+    wh_client_xdg_shell_init();
+
+    wh_xwayland_init();
 
     return 0;
-}
-
-void wh_client_ss_destroy()
-{
-    wh_client_xdg_shell_destroy();
 }
 
 WH_SURFACE_CALLBACK(client_on_map, surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
 
-    wh_client_map(client);
     client->requested_map = true;
 
     if (!client->workspace)
     {
         /* We bind the client to a workspace on map. When the client gets
          * unmapped however, we don't unbind it from the workspace. Unbinding is
-         * only done when the client is destroyed (or it's workspace is
+         * only done when the client is destroyed (or if it's workspace is
          * destroyed because the workspace's output was disconnected.) */
-        WhalePosition2D cursor_pos = wh_input_get_cursor_pos();
-        WhaleOutput* output = wh_output_get_at(&cursor_pos);
+        WhaleOutput* output = wh_output_get_focused();
         if (output)
         {
             wh_workspace_bind_client(
@@ -71,7 +60,8 @@ WH_SURFACE_CALLBACK(client_on_map, surface)
     if (client->workspace)
         wh_workspace_arrange(client->workspace);
 
-    wh_input_refocus(false);
+    wh_client_map(client);
+    wh_seat_refocus_input(false);
     return WHALE_SURFACE_CALLBACK_OK;
 }
 
@@ -85,7 +75,7 @@ WH_SURFACE_CALLBACK(client_on_unmap, surface)
     if (client->workspace)
         wh_workspace_arrange(client->workspace);
 
-    wh_input_refocus(true);
+    wh_seat_refocus_input(true);
     return WHALE_SURFACE_CALLBACK_OK;
 }
 
@@ -99,7 +89,7 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     }
 
     /* Attach the client to the root scene tree. */
-    client->scene_tree = wlr_scene_tree_create(&g_comp->root_scene->tree);
+    client->scene_tree = wlr_scene_tree_create(wh_scene_get_root_scene_tree());
     if (!client->scene_tree)
     {
         wh_log(ERR, "client: Failed to allocate scene tree.");
@@ -156,11 +146,6 @@ void wh_client_unmap(WhaleClient* client)
     wlr_scene_node_set_enabled(&client->scene_tree->node, false);
 }
 
-bool wh_client_is_mapped(const WhaleClient* client)
-{
-    return client->scene_tree->node.enabled;
-}
-
 /* Utilities */
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
 {
@@ -192,10 +177,18 @@ WhaleClient* wh_client_get_parent(WhaleClient* client)
     return client->driver.get_parent(client);
 }
 
+void wh_client_close(WhaleClient* client)
+{
+    WH_ASSERT_SANITY(client->driver.close);
+    client->driver.close(client);
+}
+
 WhaleClient* wh_client_from_surface(WhaleSurface* surface)
 {
-    WhaleSurface* topmost_surface = wh_surface_get_topmost_parent(surface);
-    WH_ASSERT_SANITY(topmost_surface->type == SURFACE_TYPE_CLIENT);
-    WH_ASSERT_SANITY(topmost_surface->data);
-    return topmost_surface->data;
+    while (surface->parent)
+        surface = surface->parent;
+
+    WH_ASSERT_SANITY(surface->type == SURFACE_TYPE_CLIENT);
+    WH_ASSERT_SANITY(surface->data);
+    return surface->data;
 }

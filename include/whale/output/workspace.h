@@ -3,7 +3,7 @@
 #define WHALE_WORKSPACE_H
 
 #include <whale/types.h>
-#include <whale/vector.h>
+#include <whale/utils/vector.h>
 
 struct whale_client;
 struct whale_output;
@@ -17,7 +17,7 @@ typedef enum
 
 typedef struct
 {
-    size_t master_client_count;
+    u8 master_client_count;
     float master_split_factor;
 } WhaleLayoutTilingContext;
 
@@ -31,7 +31,9 @@ typedef struct
     WhaleLayoutTilingContext tiling_ctx;
 } WhaleWorkspace;
 
-void wh_workspace_init(struct whale_output* parent_output, WhaleWorkspace* ws);
+int wh_workspace_init(struct whale_output* parent_output, WhaleWorkspace* ws);
+
+void wh_workspace_destroy(WhaleWorkspace* ws);
 
 int wh_workspace_set_layout(WhaleLayout layout, WhaleWorkspace* output);
 

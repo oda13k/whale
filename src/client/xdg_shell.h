@@ -2,9 +2,7 @@
 #ifndef WHALE_PRIVATE_CLIENT_XDG_SHELL_H
 #define WHALE_PRIVATE_CLIENT_XDG_SHELL_H
 
-#include <whale/compositor.h>
-
-int wh_client_xdg_shell_init(WhaleCompositor* comp);
+int wh_client_xdg_shell_init();
 
 void wh_client_xdg_shell_destroy();
 

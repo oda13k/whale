@@ -1,10 +1,11 @@
 
 #include <stdlib.h>
 #include <whale/client/client.h>
-#include <whale/input.h>
+#include <whale/debug.h>
 #include <whale/log.h>
-#include <whale/output.h>
-#include <whale/workspace.h>
+#include <whale/output/output.h>
+#include <whale/output/workspace.h>
+#include <whale/utils/vector.h>
 
 static bool wh_client_is_implicit_floating(WhaleClient* client)
 {
@@ -17,16 +18,26 @@ static bool wh_client_is_implicit_floating(WhaleClient* client)
     return wh_client_get_parent(client) || demands_size;
 }
 
-void wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
+int wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
 {
-    VEC_INIT(&ws->clients);
+    if (VEC_INIT(&ws->clients) < 0)
+        return -1;
+
     wh_workspace_set_layout(LAYOUT_TILING, ws);
 
     ws->parent_output = parent_output;
 
     /* Defaults for tiling */
-    ws->tiling_ctx.master_client_count = 1;
-    ws->tiling_ctx.master_split_factor = 0.5;
+    ws->tiling_ctx.master_client_count = 2;
+    ws->tiling_ctx.master_split_factor =
+        1.f - 1.f / (ws->tiling_ctx.master_client_count + 1);
+
+    return 0;
+}
+
+void wh_workspace_destroy(WhaleWorkspace* ws)
+{
+    VEC_DESTROY(&ws->clients);
 }
 
 int wh_workspace_set_layout(WhaleLayout layout, WhaleWorkspace* ws)
@@ -83,12 +94,12 @@ int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* workspace)
 
     /* Random sanity check: The new workspace should not already include this
      * client */
-    bool includes = false;
-    VEC_INCLUDES(client, includes, &workspace->clients);
-    WH_ASSERT_SANITY(!includes);
+    WH_ASSERT_SANITY(!VEC_INCLUDES(client, &workspace->clients));
+
+    if (VEC_PUSH(client, &workspace->clients) < 0)
+        return -1;
 
     client->workspace = workspace;
-    VEC_PUSH(client, &workspace->clients);
     return 0;
 }
 
@@ -100,9 +111,7 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
 
     /* Sanity check: this bounding workspace must actually include this client
      */
-    bool includes = false;
-    VEC_INCLUDES(client, includes, &ws->clients);
-    WH_ASSERT(includes);
+    WH_ASSERT_SANITY(VEC_INCLUDES(client, &ws->clients));
 
     /* Remove the client from the bound workspace */
     VEC_REMOVE(client, &ws->clients);
@@ -154,9 +163,6 @@ static void wh_client_arrange_tiled(
     WhaleClient* client
 )
 {
-    if (!client->workspace)
-        return;
-
     WhaleGeometry2D bounds;
     wh_output_get_geometry(&bounds, client->workspace->parent_output);
 
@@ -214,15 +220,17 @@ static void wh_client_arrange_tiled(
 void wh_workspace_arrange(WhaleWorkspace* ws)
 {
     size_t tiled_clients_on_ws = 0;
+
     VEC_FOR_EACH (client, &ws->clients)
+    {
         tiled_clients_on_ws +=
-            ((*client)->layout == LAYOUT_TILING &&
-             wh_client_is_mapped(*client));
+            ((*client)->layout == LAYOUT_TILING && (*client)->requested_map);
+    }
 
     size_t tile_order = 0;
     VEC_FOR_EACH_REVERSE(client, &ws->clients)
     {
-        if (!wh_client_is_mapped(*client))
+        if (!(*client)->requested_map)
             continue;
 
         switch ((*client)->layout)

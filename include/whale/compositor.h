@@ -1,68 +1,29 @@
 
-#ifndef _WHALE_COMPOSITOR_H
-#define _WHALE_COMPOSITOR_H
+#ifndef WHALE_COMPOSITOR_H
+#define WHALE_COMPOSITOR_H
 
-#define WLR_USE_UNSTABLE
 #include <wayland-server-core.h>
-#include <whale/output.h>
-#include <whale/vector.h>
-#include <wlr/backend.h>
-#include <wlr/render/allocator.h>
-#include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_keyboard_group.h>
-#include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_xcursor_manager.h>
+#include <whale/types.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_output.h>
 
-typedef struct
-{
-    struct wlr_keyboard_group* wlr_keyboard_group;
-    struct wl_event_source* key_repeat_source;
-} KeyboardGroup;
+int wh_compositor_start();
 
-typedef struct whale_compositor
-{
-    struct wl_display* display;
-    struct wlr_backend* backend;
-    struct wlr_session* session;
-    struct wlr_renderer* renderer;
+void wh_compositor_change_vt(u8 vt);
 
-    struct wlr_scene* root_scene;
-    struct wlr_scene_rect* root_bg_rect;
+void wh_compositor_request_exit();
 
-    struct wlr_allocator* allocator;
+struct wl_display* wh_compositor_get_wl_display();
+struct wlr_compositor* wh_compositor_get_wlr_compositor();
 
-    /* List of attached outputs */
-    VEC(WhaleOutput*) outputs;
+void wh_compositor_set_new_input_callback(
+    void (*cb)(struct wlr_input_device* dev)
+);
+void wh_compositor_clear_new_input_callback();
 
-    struct wlr_output_layout* output_layout;
+void wh_compositor_set_new_output_callback(
+    void (*cb)(struct wlr_output* output)
+);
+void wh_compositor_clear_new_output_callback();
 
-    struct wlr_cursor* cursor;
-    struct wlr_xcursor_manager* cursor_manager;
-
-    struct wlr_seat* seat;
-    KeyboardGroup keyboard_group;
-
-    /* Listeners */
-    struct
-    {
-        struct wl_listener new_output;
-        struct wl_listener output_layout_change;
-
-        struct wl_listener cursor_motion;
-        struct wl_listener cursor_motion_absolute;
-        struct wl_listener cursor_button;
-        struct wl_listener cursor_axis;
-        struct wl_listener cursor_frame;
-
-        struct wl_listener seat_request_set_cursor;
-        struct wl_listener seat_request_set_selection;
-
-        struct wl_listener keyboard_key;
-        struct wl_listener keyboard_modifier;
-
-        struct wl_listener new_input;
-    } listeners;
-} WhaleCompositor;
-
-#endif // !_WHALE_COMPOSITOR_H
+#endif // !WHALE_COMPOSITOR_H

@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define KIB (1024)
+#define MIB (1024 * 1024)
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -37,9 +40,23 @@ typedef struct
     WhaleSize2D size;
 } WhaleGeometry2D;
 
+#define S32_MAX_VALUE (2'147'483'647)
+
+// #define DIM2COORD_CAST(_dim) ({ WH_ASSERT(_dim <= S32_MAX_VALUE);
+// (wh_coord_t)(_dim); })
+
 #define LISTEN(signal, listener, cb)                                           \
     wl_signal_add(signal, ((listener)->notify = cb, listener))
 
 #define UNLISTEN(listener) wl_list_remove(&(listener)->link)
+
+#define WH_CALLBACK(_name, _listener, _data)                                   \
+    static struct wl_listener _g_listener_on_##_name;                          \
+    static void _on_##_name(_listener, _data)
+
+#define WH_LISTEN(_signal, _name)                                              \
+    LISTEN(_signal, &_g_listener_on_##_name, _on_##_name)
+
+#define WH_UNLISTEN(_name) wl_list_remove(&(_g_listener_on_##_name).link)
 
 #endif // !WHALE_TYPES_H

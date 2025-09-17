@@ -1,21 +1,20 @@
 
-#define WLR_USE_UNSTABLE
 #include <stdlib.h>
 #include <whale/client/client.h>
 #include <whale/client/surface.h>
 #include <whale/compositor.h>
-#include <whale/input.h>
+#include <whale/debug.h>
 #include <whale/log.h>
+#include <whale/output/scene.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 #define CONTAINER_OF(_ptr, _sample_type, _member)                              \
-    ((_sample_type*)((char*)(_ptr) - offsetof(_sample_type, _member)))
+    ((_sample_type*)((void*)(_ptr) - offsetof(_sample_type, _member)))
 
 #define WH_SURFACE_FROM_LISTENER(_ptr, _listener_name)                         \
     (CONTAINER_OF(_ptr, WhaleSurface, listeners._listener_name))
-
-extern WhaleCompositor g_comp;
 
 WH_SURFACE_CALLBACK(subsurface_on_commit_update_position, surface)
 {
@@ -26,6 +25,10 @@ WH_SURFACE_CALLBACK(subsurface_on_commit_update_position, surface)
     };
 
     wh_surface_set_position_relative(&pos, surface);
+
+    WhaleClient* client = wh_client_from_surface(surface);
+    if (client->workspace)
+        wh_workspace_arrange(client->workspace);
 
     return WHALE_SURFACE_CALLBACK_OK;
 }
@@ -129,8 +132,9 @@ WhaleSurface* wh_surface_new(
     /* Get the 2nd child of the scene_surface_tree (the actual surface buffer)
      * and set the our surface as it's data. Thsi is used to retrieve our
      * surface from a node when we hover over it. */
-    struct wlr_scene_node* node =
-        wl_container_of(surface->scene_surface_tree->children.next, node, link);
+    struct wlr_scene_node* node = CONTAINER_OF(
+        surface->scene_surface_tree->children.next, struct wlr_scene_node, link
+    );
     WH_ASSERT(node && node->type == WLR_SCENE_NODE_BUFFER);
     node->data = surface;
 
@@ -241,18 +245,6 @@ void wh_surface_set_position_relative(
     );
 }
 
-WhaleSurface* wh_surface_get_topmost_at(const WhalePosition2D* pos)
-{
-    struct wlr_scene_node* node = wlr_scene_node_at(
-        &g_comp.root_scene->tree.node, pos->x, pos->y, NULL, NULL
-    );
-
-    if (!node || node->type != WLR_SCENE_NODE_BUFFER)
-        return nullptr;
-
-    return surface_from_scene_node(node);
-}
-
 int wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,
     const WhalePosition2D* layout_coords,
@@ -260,9 +252,8 @@ int wh_surface_layout_to_surface_coords(
 )
 {
     WhaleClient* client = wh_client_from_surface(surface);
-    WhalePosition2D surface_pos = {
-        .x = client->scene_tree->node.x, .y = client->scene_tree->node.y
-    };
+    WhalePosition2D surface_pos;
+    wh_client_get_pos(&surface_pos, client);
 
     /* Follow the parent tree and taking into account each parent's position */
     while (surface)
@@ -281,9 +272,7 @@ void wh_surface_register_commit_cb(
     whale_surface_callback_t cb, WhaleSurface* surface
 )
 {
-    bool includes = false;
-    VEC_INCLUDES(cb, includes, &surface->callbacks.commit_callbacks);
-    if (includes)
+    if (VEC_INCLUDES(cb, &surface->callbacks.commit_callbacks))
     {
         wh_log(
             DEBUG,
@@ -299,9 +288,7 @@ void wh_surface_register_map_cb(
     whale_surface_callback_t cb, WhaleSurface* surface
 )
 {
-    bool includes = false;
-    VEC_INCLUDES(cb, includes, &surface->callbacks.map_callbacks);
-    if (includes)
+    if (VEC_INCLUDES(cb, &surface->callbacks.map_callbacks))
     {
         wh_log(
             DEBUG,
@@ -317,9 +304,7 @@ void wh_surface_register_unmap_cb(
     whale_surface_callback_t cb, WhaleSurface* surface
 )
 {
-    bool includes = false;
-    VEC_INCLUDES(cb, includes, &surface->callbacks.unmap_callbacks);
-    if (includes)
+    if (VEC_INCLUDES(cb, &surface->callbacks.unmap_callbacks))
     {
         wh_log(
             DEBUG,
@@ -329,15 +314,6 @@ void wh_surface_register_unmap_cb(
     }
 
     VEC_PUSH(cb, &surface->callbacks.unmap_callbacks);
-}
-
-WhaleSurface* wh_surface_get_topmost_parent(WhaleSurface* surface)
-{
-    WhaleSurface* topmost_surface = surface;
-    while (topmost_surface->parent)
-        topmost_surface = topmost_surface->parent;
-
-    return topmost_surface;
 }
 
 WhaleSurface* wh_surface_from_wlr_surface(const struct wlr_surface* wlr_surface)
