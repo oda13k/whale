@@ -53,7 +53,6 @@ WH_SURFACE_CALLBACK(client_on_map, surface)
             wh_workspace_bind_client(
                 client, wh_output_get_active_workspace(output)
             );
-            wh_workspace_init_client_layout(client);
         }
     }
 
@@ -146,29 +145,38 @@ void wh_client_unmap(WhaleClient* client)
     wlr_scene_node_set_enabled(&client->scene_tree->node, false);
 }
 
-/* Utilities */
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
 {
-    // FIXME: this is the client node, but we map/unmap the surface node.
     wlr_scene_node_set_position(&client->scene_tree->node, pos->x, pos->y);
 }
 
-void wh_client_get_pos(WhalePosition2D* out_pos, WhaleClient* client)
+void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client)
 {
-    out_pos->x = client->scene_tree->node.x;
-    out_pos->y = client->scene_tree->node.y;
-}
-
-void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client)
-{
-    client->surface->driver.get_size(&out_geom->size, client->surface);
-    wh_client_get_pos(&out_geom->pos, client);
+    wh_surface_set_size(size, client->surface);
 }
 
 void wh_client_set_active(bool active, WhaleClient* client)
 {
     WH_ASSERT_SANITY(client->driver.set_active);
     client->driver.set_active(active, client);
+}
+
+void wh_client_set_layout(WhaleLayout layout, WhaleClient* client)
+{
+    client->prev_layout = client->layout;
+    client->layout = layout;
+}
+
+void wh_client_raise_to_top(WhaleClient* client)
+{
+    wlr_scene_node_raise_to_top(&client->scene_tree->node);
+}
+
+void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client)
+{
+    client->surface->driver.get_size(&out_geom->size, client->surface);
+    out_geom->pos.x = client->scene_tree->node.x;
+    out_geom->pos.y = client->scene_tree->node.y;
 }
 
 WhaleClient* wh_client_get_parent(WhaleClient* client)

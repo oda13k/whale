@@ -23,7 +23,7 @@ int wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
     if (VEC_INIT(&ws->clients) < 0)
         return -1;
 
-    wh_workspace_set_layout(LAYOUT_TILING, ws);
+    ws->default_layout = LAYOUT_TILING;
 
     ws->parent_output = parent_output;
 
@@ -40,66 +40,31 @@ void wh_workspace_destroy(WhaleWorkspace* ws)
     VEC_DESTROY(&ws->clients);
 }
 
-int wh_workspace_set_layout(WhaleLayout layout, WhaleWorkspace* ws)
-{
-    if (ws->default_layout == layout)
-        return 0;
-
-    ws->default_layout = layout;
-    VEC_FOR_EACH (client, &ws->clients)
-        wh_workspace_set_client_layout(layout, *client);
-
-    return 0;
-}
-
-int wh_workspace_init_client_layout(WhaleClient* client)
-{
-    if (!client->workspace)
-    {
-        client->layout = LAYOUT_TILING;
-        return 0;
-    }
-
-    /* This is the only place where we check if a client is
-    implcitely floating and adjust it accordingly. Can a client
-    switch to being implicitely floating throughout it's lifetime? */
-    wh_workspace_set_client_layout(
-        wh_client_is_implicit_floating(client)
-            ? LAYOUT_FLOATING
-            : client->workspace->default_layout,
-        client
-    );
-    return 0;
-}
-
-int wh_workspace_set_client_layout(WhaleLayout new_layout, WhaleClient* client)
-{
-    if (!client->workspace)
-    {
-        client->layout = LAYOUT_TILING;
-        return -1;
-    }
-
-    if (client->layout == new_layout)
-        return 0;
-
-    client->layout = new_layout;
-    return 0;
-}
-
 int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* workspace)
 {
     /* The client should not be bound to any workspace */
-    WH_ASSERT(!client->workspace);
+    WH_ASSERT_SANITY(!client->workspace);
 
-    /* Random sanity check: The new workspace should not already include this
-     * client */
+    /* The new workspace should not already include this client */
     WH_ASSERT_SANITY(!VEC_INCLUDES(client, &workspace->clients));
 
     if (VEC_PUSH(client, &workspace->clients) < 0)
         return -1;
 
     client->workspace = workspace;
+
+    /* If it's the first bind we'll also set the client's layout. */
+    if (client->layout == LAYOUT_UNDEFINED)
+    {
+        WhaleLayout layout;
+        if (wh_client_is_implicit_floating(client))
+            layout = LAYOUT_FLOATING;
+        else
+            layout = workspace->default_layout;
+
+        wh_client_set_layout(layout, client);
+    }
+
     return 0;
 }
 
@@ -217,6 +182,28 @@ static void wh_client_arrange_tiled(
         wh_client_set_pos(&new_geom.pos, client);
 }
 
+static void wh_client_arrange_fullscreen(WhaleClient* client)
+{
+    WhaleGeometry2D bounds;
+    wh_output_get_geometry(&bounds, client->workspace->parent_output);
+
+    WhaleGeometry2D client_geom;
+    wh_client_get_geometry(&client_geom, client);
+
+    bool pos_changed =
+        bounds.pos.x != client_geom.pos.x || bounds.pos.y != client_geom.pos.y;
+    bool size_changed = bounds.size.w != client_geom.size.w ||
+                        bounds.size.h != client_geom.size.h;
+
+    if (pos_changed)
+        wh_client_set_pos(&bounds.pos, client);
+
+    if (size_changed)
+        wh_client_set_size(&bounds.size, client);
+
+    wh_client_raise_to_top(client);
+}
+
 void wh_workspace_arrange(WhaleWorkspace* ws)
 {
     size_t tiled_clients_on_ws = 0;
@@ -245,8 +232,13 @@ void wh_workspace_arrange(WhaleWorkspace* ws)
             wh_client_arrange_floating(*client);
             break;
 
+        case LAYOUT_FULLSCREEN:
+            wh_client_arrange_fullscreen(*client);
+            break;
+
+        case LAYOUT_UNDEFINED:
         default:
-            unreachable();
+            WH_ASSERT_NOT_REACHED();
         }
     }
 }

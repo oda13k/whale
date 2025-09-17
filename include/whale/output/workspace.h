@@ -10,9 +10,11 @@ struct whale_output;
 
 typedef enum
 {
+    /* A client with this layout means it has never been bound to a ws. */
+    LAYOUT_UNDEFINED,
     LAYOUT_TILING,
     LAYOUT_FLOATING,
-    LAYOUT_MONOCLE
+    LAYOUT_FULLSCREEN
 } WhaleLayout;
 
 typedef struct
@@ -34,14 +36,6 @@ typedef struct
 int wh_workspace_init(struct whale_output* parent_output, WhaleWorkspace* ws);
 
 void wh_workspace_destroy(WhaleWorkspace* ws);
-
-int wh_workspace_set_layout(WhaleLayout layout, WhaleWorkspace* output);
-
-int wh_workspace_init_client_layout(struct whale_client* client);
-
-int wh_workspace_set_client_layout(
-    WhaleLayout new_layout, struct whale_client* client
-);
 
 int wh_workspace_bind_client(
     struct whale_client* client, WhaleWorkspace* workspace

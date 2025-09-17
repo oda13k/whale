@@ -55,11 +55,8 @@ static void handle_interactive_pointer_motion()
         WhalePosition2D cursor_pos;
         wh_pointer_get_pos(&cursor_pos);
 
-        WhalePosition2D client_pos;
-        wh_client_get_pos(&client_pos, client);
-
-        WhaleSize2D client_size;
-        client->surface->driver.get_size(&client_size, client->surface);
+        WhaleGeometry2D client_geom;
+        wh_client_get_geometry(&client_geom, client);
 
         WhaleSize2D min_client_size;
         client->surface->driver.get_minmax_size(
@@ -77,17 +74,17 @@ static void handle_interactive_pointer_motion()
         bool vertical_edge = g_pointer_mode.resize_edge == WLR_EDGE_TOP ||
                              g_pointer_mode.resize_edge == WLR_EDGE_BOTTOM;
 
-        s32 delta_x = cursor_pos.x - client_pos.x;
-        s32 delta_y = cursor_pos.y - client_pos.y;
+        s32 delta_x = cursor_pos.x - client_geom.pos.x;
+        s32 delta_y = cursor_pos.y - client_geom.pos.y;
 
         WhaleSize2D new_size = {
             .w = vertical_edge
-                     ? client_size.w
+                     ? client_geom.size.w
                      : u32_2max(
                            delta_x < 0 ? 0 : (u32)delta_x, min_client_size.w
                        ),
             .h = horizontal_edge
-                     ? client_size.h
+                     ? client_geom.size.h
                      : u32_2max(
                            delta_y < 0 ? 0 : (u32)delta_y, min_client_size.h
                        )
@@ -194,10 +191,7 @@ WH_CALLBACK(pointer_button, struct wl_listener*, void* data)
         }
 
         if (surface)
-        {
-            WhaleClient* client = wh_client_from_surface(surface);
-            wlr_scene_node_raise_to_top(&client->scene_tree->node);
-        }
+            wh_client_raise_to_top(wh_client_from_surface(surface));
     }
 
     wlr_seat_pointer_notify_button(
@@ -333,9 +327,10 @@ void wh_pointer_start_interactive_move(WhaleSurface* surface)
 
     g_pointer_mode.mode = WHALE_POINTER_MODE_INTERACTIVE_MOVE;
     wh_pointer_get_pos(&g_pointer_mode.cursor_start_pos);
-    wh_client_get_pos(
-        &g_pointer_mode.client_start_pos, wh_client_from_surface(surface)
-    );
+
+    WhaleGeometry2D client_geom;
+    wh_client_get_geometry(&client_geom, wh_client_from_surface(surface));
+    g_pointer_mode.client_start_pos = client_geom.pos;
 }
 
 void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface)
@@ -346,9 +341,11 @@ void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface)
 
     g_pointer_mode.mode = WHALE_POINTER_MODE_INTERACTIVE_RESIZE;
     wh_pointer_get_pos(&g_pointer_mode.cursor_start_pos);
-    wh_client_get_pos(
-        &g_pointer_mode.client_start_pos, wh_client_from_surface(surface)
-    );
+
+    WhaleGeometry2D client_geom;
+    wh_client_get_geometry(&client_geom, wh_client_from_surface(surface));
+    g_pointer_mode.client_start_pos = client_geom.pos;
+
     g_pointer_mode.resize_edge = edge;
 }
 

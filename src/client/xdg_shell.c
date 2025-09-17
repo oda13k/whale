@@ -357,12 +357,22 @@ on_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
     WhaleXDGToplevelData* xdg_data =
         XDG_TOPLEVEL_DATA_FROM_LISTENER(listener, request_fullscreen);
 
-    /* Cool and funny note: If we don't actually honor this request
-    (we can't just send a simple configure notify) firefox shits it's
-    pants and it's UI stops working after requesting a fullscreen :^) */
-    wlr_xdg_toplevel_set_fullscreen(
-        xdg_data->toplevel, xdg_data->toplevel->requested.fullscreen
-    );
+    WhaleClient* client = xdg_data->client;
+    bool fullscreen = xdg_data->toplevel->requested.fullscreen;
+
+    if (fullscreen)
+        wh_client_set_layout(LAYOUT_FULLSCREEN, client);
+    else if (client->prev_layout != LAYOUT_UNDEFINED)
+        wh_client_set_layout(client->prev_layout, client);
+
+    if (xdg_data->toplevel->base->initialized)
+    {
+        /* Cool and funny note: If we don't actually honor this request
+        (we can't just send a simple configure notify) firefox shits it's
+        pants and it's UI stops working after requesting a fullscreen :^) */
+        wlr_xdg_toplevel_set_fullscreen(xdg_data->toplevel, fullscreen);
+        wh_workspace_arrange(client->workspace);
+    }
 }
 
 static void
@@ -371,7 +381,8 @@ on_xdg_toplevel_request_maximize(struct wl_listener* listener, void*)
     WhaleXDGToplevelData* xdg_data =
         XDG_TOPLEVEL_DATA_FROM_LISTENER(listener, request_maximize);
 
-    wlr_xdg_surface_schedule_configure(xdg_data->toplevel->base);
+    if (xdg_data->toplevel->base->initialized)
+        wlr_xdg_surface_schedule_configure(xdg_data->toplevel->base);
 }
 
 static void on_xdg_toplevel_new(struct wl_listener*, void* data)

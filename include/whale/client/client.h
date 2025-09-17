@@ -13,6 +13,8 @@ typedef struct whale_client
     struct wlr_scene_tree* scene_tree;
 
     WhaleWorkspace* workspace;
+
+    WhaleLayout prev_layout;
     WhaleLayout layout;
 
     bool requested_map;
@@ -34,11 +36,13 @@ void wh_client_map(WhaleClient* client);
 void wh_client_unmap(WhaleClient* client);
 
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client);
-void wh_client_get_pos(WhalePosition2D* out_pos, WhaleClient* client);
+void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client);
+void wh_client_set_active(bool active, WhaleClient* client);
+void wh_client_set_layout(WhaleLayout layout, WhaleClient* client);
+
+void wh_client_raise_to_top(WhaleClient* client);
 
 void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client);
-
-void wh_client_set_active(bool active, WhaleClient* client);
 
 WhaleClient* wh_client_get_parent(WhaleClient* client);
 

@@ -252,19 +252,19 @@ int wh_surface_layout_to_surface_coords(
 )
 {
     WhaleClient* client = wh_client_from_surface(surface);
-    WhalePosition2D surface_pos;
-    wh_client_get_pos(&surface_pos, client);
+    WhaleGeometry2D geom;
+    wh_client_get_geometry(&geom, client);
 
     /* Follow the parent tree and taking into account each parent's position */
     while (surface)
     {
-        surface_pos.x += surface->scene_surface_tree->node.x;
-        surface_pos.y += surface->scene_surface_tree->node.y;
+        geom.pos.x += surface->scene_surface_tree->node.x;
+        geom.pos.y += surface->scene_surface_tree->node.y;
         surface = surface->parent;
     }
 
-    surface_coords->x = layout_coords->x - surface_pos.x;
-    surface_coords->y = layout_coords->y - surface_pos.y;
+    surface_coords->x = layout_coords->x - geom.pos.x;
+    surface_coords->y = layout_coords->y - geom.pos.y;
     return 0;
 }
 
