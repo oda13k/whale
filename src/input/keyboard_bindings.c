@@ -21,6 +21,8 @@
 typedef union
 {
     u64 unsigned_64;
+    s8 signed_8;
+    float float_32;
     char* string;
 } BindingCallbackArg;
 
@@ -46,47 +48,25 @@ static void spawn(const BindingCallbackArg* arg)
     wh_proc_spawn_literal(arg->string);
 }
 
-static void inc_tiled_master_split(const BindingCallbackArg*)
+static void step_tiling_master_split_factor(const BindingCallbackArg* arg)
 {
     WhaleOutput* output = wh_output_get_focused();
     if (!output)
         return;
 
     WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_tiling_increment_master_split(0.05, ws);
+    wh_workspace_step_tiling_master_split_factor(arg->float_32, ws);
     wh_workspace_arrange(ws);
 }
 
-static void dec_tiled_master_split(const BindingCallbackArg*)
+static void step_tiling_master_client_count(const BindingCallbackArg* arg)
 {
     WhaleOutput* output = wh_output_get_focused();
     if (!output)
         return;
 
     WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_tiling_decrement_master_split(0.05, ws);
-    wh_workspace_arrange(ws);
-}
-
-static void inc_tiled_master_max_clients(const BindingCallbackArg*)
-{
-    WhaleOutput* output = wh_output_get_focused();
-    if (!output)
-        return;
-
-    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_tiling_increment_master_max_clients(1, ws);
-    wh_workspace_arrange(ws);
-}
-
-static void dec_tiled_master_max_clients(const BindingCallbackArg*)
-{
-    WhaleOutput* output = wh_output_get_focused();
-    if (!output)
-        return;
-
-    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_tiling_decrement_master_max_clients(1, ws);
+    wh_workspace_step_tiling_master_client_count(arg->signed_8, ws);
     wh_workspace_arrange(ws);
 }
 
@@ -166,32 +146,32 @@ static void on_keyboard_bindings_config_changed()
                                      .arg = {.string = "/bin/librewolf -p"}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){
-        .key = XKB_KEY_h,
-        .modifiers = MOD_NORMAL,
-        .callback = dec_tiled_master_split,
-    };
+    binding =
+        (WhaleKeyboardBinding){.key = XKB_KEY_h,
+                               .modifiers = MOD_NORMAL,
+                               .callback = step_tiling_master_split_factor,
+                               .arg = {.float_32 = -0.05}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){
-        .key = XKB_KEY_l,
-        .modifiers = MOD_NORMAL,
-        .callback = inc_tiled_master_split,
-    };
+    binding =
+        (WhaleKeyboardBinding){.key = XKB_KEY_l,
+                               .modifiers = MOD_NORMAL,
+                               .callback = step_tiling_master_split_factor,
+                               .arg = {.float_32 = 0.05}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){
-        .key = XKB_KEY_d,
-        .modifiers = MOD_NORMAL,
-        .callback = dec_tiled_master_max_clients,
-    };
+    binding =
+        (WhaleKeyboardBinding){.key = XKB_KEY_d,
+                               .modifiers = MOD_NORMAL,
+                               .callback = step_tiling_master_client_count,
+                               .arg = {.signed_8 = -1}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){
-        .key = XKB_KEY_i,
-        .modifiers = MOD_NORMAL,
-        .callback = inc_tiled_master_max_clients,
-    };
+    binding =
+        (WhaleKeyboardBinding){.key = XKB_KEY_i,
+                               .modifiers = MOD_NORMAL,
+                               .callback = step_tiling_master_client_count,
+                               .arg = {.signed_8 = 1}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_1,

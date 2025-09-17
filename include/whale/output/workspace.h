@@ -21,16 +21,17 @@ typedef struct
 {
     u8 master_client_count;
     float master_split_factor;
-} WhaleLayoutTilingContext;
+} WhaleWorkspaceTilingContext;
 
 typedef struct
 {
     struct whale_output* parent_output;
 
     WhaleLayout default_layout;
+
     VEC(struct whale_client*) clients;
 
-    WhaleLayoutTilingContext tiling_ctx;
+    WhaleWorkspaceTilingContext tiling_ctx;
 } WhaleWorkspace;
 
 int wh_workspace_init(struct whale_output* parent_output, WhaleWorkspace* ws);
@@ -45,16 +46,9 @@ WhaleWorkspace* wh_workspace_unbind_client(struct whale_client* client);
 
 void wh_workspace_arrange(WhaleWorkspace* ws);
 
-void wh_workspace_tiling_increment_master_split(float step, WhaleWorkspace* ws);
-
-void wh_workspace_tiling_decrement_master_split(float step, WhaleWorkspace* ws);
-
-void wh_workspace_tiling_increment_master_max_clients(
-    u8 step, WhaleWorkspace* ws
+void wh_workspace_step_tiling_master_split_factor(
+    float step, WhaleWorkspace* ws
 );
-
-void wh_workspace_tiling_decrement_master_max_clients(
-    u8 step, WhaleWorkspace* ws
-);
+void wh_workspace_step_tiling_master_client_count(s8 step, WhaleWorkspace* ws);
 
 #endif // !WHALE_WORKSPACE_H

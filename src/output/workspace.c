@@ -124,7 +124,7 @@ static void wh_client_arrange_floating(WhaleClient* client)
 static void wh_client_arrange_tiled(
     size_t tile_order,
     size_t tiled_clients_on_output,
-    WhaleLayoutTilingContext* ctx,
+    WhaleWorkspaceTilingContext* ctx,
     WhaleClient* client
 )
 {
@@ -243,32 +243,30 @@ void wh_workspace_arrange(WhaleWorkspace* ws)
     }
 }
 
-void wh_workspace_tiling_increment_master_split(float step, WhaleWorkspace* ws)
-{
-    if ((ws->tiling_ctx.master_split_factor += step) > 0.8f)
-        ws->tiling_ctx.master_split_factor = 0.8f;
-}
-
-void wh_workspace_tiling_decrement_master_split(float step, WhaleWorkspace* ws)
-{
-    if ((ws->tiling_ctx.master_split_factor -= step) < 0.2f)
-        ws->tiling_ctx.master_split_factor = 0.2f;
-}
-
-void wh_workspace_tiling_increment_master_max_clients(
-    u8 step, WhaleWorkspace* ws
+void wh_workspace_step_tiling_master_split_factor(
+    float step, WhaleWorkspace* ws
 )
 {
-    // FIXME: possible (unprobable) overflow.
-    ws->tiling_ctx.master_client_count += step;
+    float factor = ws->tiling_ctx.master_split_factor + step;
+
+    if (factor > 0.8f)
+        factor = 0.8f;
+    else if (factor < 0.2f)
+        factor = 0.2f;
+
+    ws->tiling_ctx.master_split_factor = factor;
 }
 
-void wh_workspace_tiling_decrement_master_max_clients(
-    u8 step, WhaleWorkspace* ws
-)
+void wh_workspace_step_tiling_master_client_count(s8 step, WhaleWorkspace* ws)
 {
-    if (step > ws->tiling_ctx.master_client_count)
-        return;
+    u8 old_client_count = ws->tiling_ctx.master_client_count;
+    u8 new_client_count = old_client_count + step;
 
-    ws->tiling_ctx.master_client_count -= step;
+    /* Over/underflow checks */
+    if (step < 0 && new_client_count > old_client_count)
+        new_client_count = 0;
+    else if (step > 0 && new_client_count < old_client_count)
+        new_client_count = 255;
+
+    ws->tiling_ctx.master_client_count = new_client_count;
 }
