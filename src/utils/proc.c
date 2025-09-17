@@ -78,7 +78,7 @@ int wh_proc_spawn_literal(const char* cmd)
 
     char* args[MAX_ARGS] = {0};
 
-#undef MAX_TOKENS
+#undef MAX_ARGS
 
     size_t i = 0;
     char* tok = strtok(dup_cmd, " ");
