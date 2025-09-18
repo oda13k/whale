@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <whale/debug.h>
 
-static void on_sigsegv(int)
+[[noreturn]] static void on_sigsegv(int)
 {
     /* wh_die calls wh_log which calls printf which is technically signal
      * un-safe, but we are aborting so? */
@@ -19,10 +19,12 @@ void wh_die(bool print_call_trace, const char* fmt, ...)
     va_list vargs;
     va_start(vargs, fmt);
 
-    wh_log(FATAL, "");
+    WH_NOWARN("-Wformat-zero-length", wh_log(FATAL, "");)
     wh_vlog(FATAL, fmt, vargs);
 
     va_end(vargs);
+
+    wh_log_flush_buffers();
 
     abort();
 }
@@ -36,12 +38,12 @@ void wh_debug_print_stack_trace(LogLevel log_level)
 {
 #define MAX_SYMBOLS 64
     void* backtrace_buf[MAX_SYMBOLS];
-    size_t symbol_count = (size_t)backtrace(backtrace_buf, MAX_SYMBOLS);
+    int symbol_count = backtrace(backtrace_buf, MAX_SYMBOLS);
     char** symbols = backtrace_symbols(backtrace_buf, symbol_count);
 #undef MAX_SYMBOLS
 
     wh_log(log_level, "Call trace:");
 
-    for (size_t i = 1; i < symbol_count; ++i)
+    for (size_t i = 1; i < (size_t)symbol_count; ++i)
         wh_log(log_level, "  %s", symbols[i]);
 }

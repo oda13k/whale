@@ -1,5 +1,5 @@
 
-CC                                  := clang
+CC                                  ?= clang
 PKG_CONFIG                          ?= pkg-config
 
 BIN_NAME                            ?= whale
@@ -13,14 +13,16 @@ WAYLAND_SCANNER       := $(shell $(PKG_CONFIG) --variable=wayland_scanner waylan
 
 PKG_CONFIG_PKGS       := wayland-server wlroots-0.19 xkbcommon
 
-TARGET    := debug
+BUILD_DEBUG           := 1
+BUILD_RELEASE         := 0
 
-EXCLUDE_WARNINGS  :=  -Wno-gnu-statement-expression-from-macro-expansion \
--Wno-gnu-pointer-arith -Wno-declaration-after-statement -Wno-covered-switch-default
+EXCLUDE_WARNINGS      :=  -Wno-gnu-statement-expression-from-macro-expansion \
+-Wno-gnu-pointer-arith -Wno-declaration-after-statement -Wno-covered-switch-default \
+-Wno-pre-c23-compat -Wno-padded -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
+-Wno-vla
 
-WARNINGS  := -Wall -Wextra -Wno-pre-c23-compat -Wno-padded \
--Wimplicit-function-declaration -Wno-undef -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
--Wno-unused-function $(EXCLUDE_WARNINGS)
+WARNINGS  := -Wall -Wextra -Wimplicit-function-declaration \
+$(EXCLUDE_WARNINGS)
 
 CFLAGS    := -MD -MP -std=c23 $(WARNINGS) \
 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) \
@@ -28,23 +30,19 @@ CFLAGS    := -MD -MP -std=c23 $(WARNINGS) \
 
 LDFLAGS   := -lm
 
-ifeq ($(TARGET),debug)
-	CFLAGS += -ggdb3 -DWHALE_TARGET=debug
+ifeq ($(BUILD_DEBUG),1)
+	CFLAGS += -ggdb3 -DWHALE_DEBUG=1
 	LDFLAGS += -Wl,-export-dynamic
-endif
-
-BROKEN_CODE_C23_LSP := 1
-ifeq ($(BROKEN_CODE_C23_LSP),1)
-	CFLAGS += -Dtrue=1 -Dfalse=0
 endif
 
 CFLAGS    += $(shell ${PKG_CONFIG} --cflags ${PKG_CONFIG_PKGS})
 LDFLAGS   += $(shell ${PKG_CONFIG} --libs ${PKG_CONFIG_PKGS})
 
 SRC       := src/whale.c src/compositor.c src/log.c \
-src/debug.c src/output/output.c src/output/scene.c src/output/workspace.c src/client/xwayland.c src/client/client.c \
-src/client/surface.c src/client/xdg_shell.c src/input/seat.c \
-src/input/pointer.c src/input/keyboard.c src/input/keyboard_bindings.c \
+src/debug.c src/output/output.c src/output/scene.c src/output/workspace.c \
+src/client/xwayland.c src/client/client.c src/client/surface.c \
+src/client/xdg_shell.c src/input/seat.c src/input/pointer.c \
+src/input/keyboard.c src/input/keyboard_bindings.c \
 src/input/clipboard.c src/utils/toml.c src/utils/proc.c
 
 OBJS      := $(addprefix $(BUILD_DIR)/, $(SRC:%.c=%.c.o))

@@ -1,4 +1,5 @@
 
+#include "keyboard_bindings.h"
 #include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/debug.h>
@@ -34,7 +35,7 @@ typedef struct
     BindingCallbackArg arg;
 } WhaleKeyboardBinding;
 
-VEC(WhaleKeyboardBinding) g_keyboard_bindings;
+static VEC(WhaleKeyboardBinding) g_keyboard_bindings;
 
 static void terminate_focused_client(const BindingCallbackArg*)
 {
@@ -150,14 +151,14 @@ static void on_keyboard_bindings_config_changed()
         (WhaleKeyboardBinding){.key = XKB_KEY_h,
                                .modifiers = MOD_NORMAL,
                                .callback = step_tiling_master_split_factor,
-                               .arg = {.float_32 = -0.05}};
+                               .arg = {.float_32 = -0.05f}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
     binding =
         (WhaleKeyboardBinding){.key = XKB_KEY_l,
                                .modifiers = MOD_NORMAL,
                                .callback = step_tiling_master_split_factor,
-                               .arg = {.float_32 = 0.05}};
+                               .arg = {.float_32 = 0.05f}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
     binding =

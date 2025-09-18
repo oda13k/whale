@@ -8,6 +8,7 @@
 #include <whale/input/seat.h>
 #include <whale/output/scene.h>
 #include <wlr/backend.h>
+#include <wlr/backend/drm.h>
 #include <wlr/backend/session.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_compositor.h>
@@ -23,6 +24,7 @@ typedef struct
     struct wlr_compositor* compositor;
 } WhaleCompositor;
 
+static bool g_on_bare_metal;
 static WhaleCompositor g_comp;
 
 static void (*g_on_new_input_callback)(struct wlr_input_device* dev);
@@ -68,6 +70,8 @@ static int wh_compositor_init_core_interfaces()
 
 int wh_compositor_start()
 {
+    wh_log_init();
+
     wh_debug_register_crash_handlers();
 
     if (!getenv("XDG_RUNTIME_DIR"))
@@ -83,6 +87,8 @@ int wh_compositor_start()
     g_comp.backend = wlr_backend_autocreate(event_loop, &g_comp.session);
     if (!g_comp.backend)
         wh_die(false, "compositor: Failed to create wlr backend.");
+
+    g_on_bare_metal = wlr_backend_is_drm(g_comp.backend);
 
     g_comp.renderer = wlr_renderer_autocreate(g_comp.backend);
     if (!g_comp.renderer)
@@ -138,6 +144,11 @@ int wh_compositor_start()
     wh_seat_destroy();
 
     return 0;
+}
+
+bool wh_compositor_running_on_bare_metal()
+{
+    return g_on_bare_metal;
 }
 
 void wh_compositor_change_vt(u8 vt)

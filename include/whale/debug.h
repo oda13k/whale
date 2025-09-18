@@ -23,13 +23,21 @@
         (size_t)__LINE__                                                       \
     )
 
-#if WHALE_TARGET == debug
+#if WHALE_DEBUG == 1
 #define WH_ASSERT_SANITY(_expr) WH_ASSERT(_expr)
 #else
 #define WH_ASSERT_SANITY(_expr)
 #endif
 
-__attribute__((format(printf, 2, 3))) __attribute__((noreturn)) void
+#define WH_PRAGMA(_x) _Pragma(#_x)
+
+#define WH_NOWARN(_warn, ...)                                                  \
+    WH_PRAGMA(GCC diagnostic push)                                             \
+    WH_PRAGMA(GCC diagnostic ignored _warn)                                    \
+    __VA_ARGS__                                                                \
+    WH_PRAGMA(GCC diagnostic pop)
+
+[[noreturn]] [[gnu::format(printf, 2, 3)]] void
 wh_die(bool print_call_trace, const char* fmt, ...);
 
 void wh_debug_register_crash_handlers();
