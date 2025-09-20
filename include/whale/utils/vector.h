@@ -105,9 +105,11 @@
 #define VEC_REMOVE_AT(_idx, _vec)                                              \
     ({                                                                         \
         WH_ASSERT(_idx < (_vec)->count);                                       \
+        auto _ret = (_vec)->data[_idx];                                        \
         --(_vec)->count;                                                       \
         for (size_t _i = _idx; _i < (_vec)->count; ++_i)                       \
             (_vec)->data[_i] = (_vec)->data[_i + 1];                           \
+        _ret;                                                                  \
     })
 
 #define VEC_AT(_idx, _vec) ((_vec)->data[_idx])
