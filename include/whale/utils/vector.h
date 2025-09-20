@@ -110,13 +110,6 @@
             (_vec)->data[_i] = (_vec)->data[_i + 1];                           \
     })
 
-#define VEC_REMOVE_BY_PTR(_ptr, _vec)                                          \
-    ({                                                                         \
-        WH_ASSERT(_ptr >= (_vec)->data);                                       \
-        size_t _idx = _ptr - (_vec)->data;                                     \
-        VEC_REMOVE_AT(_idx, _vec);                                             \
-    })
-
 #define VEC_AT(_idx, _vec) ((_vec)->data[_idx])
 
 #define VEC_GET_LENGTH(_vec) ((_vec)->count)
