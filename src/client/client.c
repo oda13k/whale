@@ -68,8 +68,8 @@ WH_SURFACE_CALLBACK(client_on_unmap, surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
 
-    wh_client_unmap(client);
     client->requested_map = false;
+    wh_client_unmap(client);
 
     if (client->workspace)
         wh_workspace_arrange(client->workspace);
@@ -88,7 +88,7 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     }
 
     /* Attach the client to the root scene tree. */
-    client->scene_tree = wlr_scene_tree_create(wh_scene_get_root_scene_tree());
+    client->scene_tree = wh_scene_tree_new();
     if (!client->scene_tree)
     {
         wh_log(ERR, "client: Failed to allocate scene tree.");
@@ -161,10 +161,11 @@ void wh_client_set_active(bool active, WhaleClient* client)
     client->driver.set_active(active, client);
 }
 
-void wh_client_set_layout(WhaleLayout layout, WhaleClient* client)
+void wh_client_set_layer(WhaleClientLayer layer, WhaleClient* client)
 {
-    client->prev_layout = client->layout;
-    client->layout = layout;
+    client->prev_layer = client->layer;
+    client->layer = layer;
+    wh_scene_tree_set_layer(client->scene_tree, client->layer);
 }
 
 void wh_client_raise_to_top(WhaleClient* client)

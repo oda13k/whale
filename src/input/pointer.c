@@ -191,7 +191,11 @@ WH_CALLBACK(pointer_button, struct wl_listener*, void* data)
         }
 
         if (surface)
-            wh_client_raise_to_top(wh_client_from_surface(surface));
+        {
+            WhaleClient* client = wh_client_from_surface(surface);
+            if (client->layer == WH_CLIENT_LAYER_FLOATING)
+                wh_client_raise_to_top(client);
+        }
     }
 
     wlr_seat_pointer_notify_button(

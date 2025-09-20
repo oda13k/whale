@@ -5,6 +5,7 @@
 #include <wlr/types/wlr_scene.h>
 
 static struct wlr_scene* g_root_scene;
+static struct wlr_scene_tree* g_scene_layer_trees[WH_CLIENT_LAYER_COUNT];
 static struct wlr_output_layout* g_output_layout;
 
 WH_CALLBACK(output_layout_change, struct wl_listener*, void*)
@@ -34,6 +35,21 @@ int wh_scene_init()
         return -1;
     }
 
+    for (size_t i = 0; i < WH_CLIENT_LAYER_COUNT; ++i)
+    {
+        g_scene_layer_trees[i] = wlr_scene_tree_create(&g_root_scene->tree);
+        if (!g_scene_layer_trees[i])
+        {
+            // FIXME?: Memory leaks
+            wh_log(ERR, "scene: Failed to allocate a scene layer tree.");
+            return -1;
+        }
+    }
+
+    wlr_scene_node_set_enabled(
+        &g_scene_layer_trees[WH_CLIENT_LAYER_UNDEFINED]->node, false
+    );
+
     WH_LISTEN(&g_output_layout->events.change, output_layout_change);
 
     return 0;
@@ -60,6 +76,20 @@ int wh_scene_detach_output(WhaleOutput* output)
     output->scene_output = nullptr;
 
     return 0;
+}
+
+struct wlr_scene_tree* wh_scene_tree_new()
+{
+    return wlr_scene_tree_create(
+        g_scene_layer_trees[WH_CLIENT_LAYER_UNDEFINED]
+    );
+}
+
+void wh_scene_tree_set_layer(
+    struct wlr_scene_tree* tree, WhaleClientLayer layer
+)
+{
+    wlr_scene_node_reparent(&tree->node, g_scene_layer_trees[layer]);
 }
 
 int wh_scene_get_output_position(
@@ -89,11 +119,6 @@ WhaleOutput* wh_scene_get_output_at(WhalePosition2D* pos)
         return NULL;
 
     return wlr_output->data;
-}
-
-struct wlr_scene_tree* wh_scene_get_root_scene_tree()
-{
-    return &g_root_scene->tree;
 }
 
 int wh_scene_attach_pointer(struct wlr_cursor* pointer)

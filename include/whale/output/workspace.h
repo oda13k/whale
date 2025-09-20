@@ -2,20 +2,11 @@
 #ifndef WHALE_WORKSPACE_H
 #define WHALE_WORKSPACE_H
 
+#include <whale/client/client.h>
 #include <whale/types.h>
 #include <whale/utils/vector.h>
 
-struct whale_client;
 struct whale_output;
-
-typedef enum
-{
-    /* A client with this layout means it has never been bound to a ws. */
-    LAYOUT_UNDEFINED,
-    LAYOUT_TILING,
-    LAYOUT_FLOATING,
-    LAYOUT_FULLSCREEN
-} WhaleLayout;
 
 typedef struct
 {
@@ -23,13 +14,15 @@ typedef struct
     float master_split_factor;
 } WhaleWorkspaceTilingContext;
 
-typedef struct
+typedef struct whale_workspace
 {
     struct whale_output* parent_output;
 
-    WhaleLayout default_layout;
+    /* The default layer is the layer clients who are placed on this workspace
+     * automatically inherit if they don't already have a layer/preferences. */
+    WhaleClientLayer default_layer;
 
-    VEC(struct whale_client*) clients;
+    VEC(WhaleClient*) clients;
 
     WhaleWorkspaceTilingContext tiling_ctx;
 } WhaleWorkspace;

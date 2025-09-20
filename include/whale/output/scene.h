@@ -2,6 +2,7 @@
 #ifndef WHALE_OUTPUT_SCENE_H
 #define WHALE_OUTPUT_SCENE_H
 
+#include <whale/client/client.h>
 #include <whale/client/surface.h>
 #include <whale/output/output.h>
 #include <whale/types.h>
@@ -10,7 +11,6 @@
 int wh_scene_init();
 
 int wh_scene_attach_output(WhaleOutput* output, u32 x, u32 y);
-
 int wh_scene_detach_output(WhaleOutput* output);
 
 int wh_scene_get_output_position(
@@ -19,7 +19,10 @@ int wh_scene_get_output_position(
 
 WhaleOutput* wh_scene_get_output_at(WhalePosition2D* pos);
 
-struct wlr_scene_tree* wh_scene_get_root_scene_tree();
+struct wlr_scene_tree* wh_scene_tree_new();
+void wh_scene_tree_set_layer(
+    struct wlr_scene_tree* tree, WhaleClientLayer layer
+);
 
 int wh_scene_attach_pointer(struct wlr_cursor* cursor);
 

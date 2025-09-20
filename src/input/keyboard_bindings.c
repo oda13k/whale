@@ -109,7 +109,7 @@ static void move_client_to_workspace(const BindingCallbackArg* arg)
 
     /* If the client was managed, we need to re-arrange the workspace, as
     this is a workspace that is focused right now */
-    if (client->layout == LAYOUT_TILING)
+    if (client->layer == WH_CLIENT_LAYER_TILING)
         wh_workspace_arrange(old_ws);
 
     /* We don't need to arrange this workspace here, it'll get re-arranged

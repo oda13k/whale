@@ -23,7 +23,7 @@ int wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
     if (VEC_INIT(&ws->clients) < 0)
         return -1;
 
-    ws->default_layout = LAYOUT_TILING;
+    ws->default_layer = WH_CLIENT_LAYER_TILING;
 
     ws->parent_output = parent_output;
 
@@ -54,15 +54,15 @@ int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* workspace)
     client->workspace = workspace;
 
     /* If it's the first bind we'll also set the client's layout. */
-    if (client->layout == LAYOUT_UNDEFINED)
+    if (client->layer == WH_CLIENT_LAYER_UNDEFINED)
     {
-        WhaleLayout layout;
+        WhaleClientLayer layout;
         if (wh_client_is_implicit_floating(client))
-            layout = LAYOUT_FLOATING;
+            layout = WH_CLIENT_LAYER_FLOATING;
         else
-            layout = workspace->default_layout;
+            layout = workspace->default_layer;
 
-        wh_client_set_layout(layout, client);
+        wh_client_set_layer(layout, client);
     }
 
     return 0;
@@ -85,7 +85,7 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
     return ws;
 }
 
-static void wh_client_arrange_floating(WhaleClient* client)
+static void client_arrange_floating(WhaleClient* client)
 {
     if (!client->workspace)
         return;
@@ -121,7 +121,7 @@ static void wh_client_arrange_floating(WhaleClient* client)
     // inside the window are arragned as if the window had another size.
 }
 
-static void wh_client_arrange_tiled(
+static void client_arrange_tiled(
     size_t tile_order,
     size_t tiled_clients_on_output,
     WhaleWorkspaceTilingContext* ctx,
@@ -182,7 +182,7 @@ static void wh_client_arrange_tiled(
         wh_client_set_pos(&new_geom.pos, client);
 }
 
-static void wh_client_arrange_fullscreen(WhaleClient* client)
+static void client_arrange_fullscreen(WhaleClient* client)
 {
     WhaleGeometry2D bounds;
     wh_output_get_geometry(&bounds, client->workspace->parent_output);
@@ -200,8 +200,6 @@ static void wh_client_arrange_fullscreen(WhaleClient* client)
 
     if (size_changed)
         wh_client_set_size(&bounds.size, client);
-
-    wh_client_raise_to_top(client);
 }
 
 void wh_workspace_arrange(WhaleWorkspace* ws)
@@ -211,7 +209,8 @@ void wh_workspace_arrange(WhaleWorkspace* ws)
     VEC_FOR_EACH (client, &ws->clients)
     {
         tiled_clients_on_ws +=
-            ((*client)->layout == LAYOUT_TILING && (*client)->requested_map);
+            ((*client)->layer == WH_CLIENT_LAYER_TILING &&
+             (*client)->requested_map);
     }
 
     size_t tile_order = 0;
@@ -220,23 +219,28 @@ void wh_workspace_arrange(WhaleWorkspace* ws)
         if (!(*client)->requested_map)
             continue;
 
-        switch ((*client)->layout)
+        switch ((*client)->layer)
         {
-        case LAYOUT_TILING:
-            wh_client_arrange_tiled(
+        case WH_CLIENT_LAYER_TILING:
+            client_arrange_tiled(
                 tile_order++, tiled_clients_on_ws, &ws->tiling_ctx, *client
             );
             break;
 
-        case LAYOUT_FLOATING:
-            wh_client_arrange_floating(*client);
+        case WH_CLIENT_LAYER_FLOATING:
+            client_arrange_floating(*client);
             break;
 
-        case LAYOUT_FULLSCREEN:
-            wh_client_arrange_fullscreen(*client);
+        case WH_CLIENT_LAYER_FULLSCREEN:
+            client_arrange_fullscreen(*client);
             break;
 
-        case LAYOUT_UNDEFINED:
+        case WH_CLIENT_LAYER_BG:
+        case WH_CLIENT_LAYER_OVERLAY:
+            WH_ASSERT_SANITY(false);
+
+        case WH_CLIENT_LAYER_COUNT:
+        case WH_CLIENT_LAYER_UNDEFINED:
         default:
             WH_ASSERT_NOT_REACHED();
         }

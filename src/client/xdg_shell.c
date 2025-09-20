@@ -16,6 +16,7 @@
 #include <whale/debug.h>
 #include <whale/input/pointer.h>
 #include <whale/log.h>
+#include <whale/output/workspace.h>
 #include <whale/types.h>
 #include <wlr/types/wlr_server_decoration.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -361,9 +362,9 @@ on_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
     bool fullscreen = xdg_data->toplevel->requested.fullscreen;
 
     if (fullscreen)
-        wh_client_set_layout(LAYOUT_FULLSCREEN, client);
-    else if (client->prev_layout != LAYOUT_UNDEFINED)
-        wh_client_set_layout(client->prev_layout, client);
+        wh_client_set_layer(WH_CLIENT_LAYER_FULLSCREEN, client);
+    else if (client->prev_layer != WH_CLIENT_LAYER_UNDEFINED)
+        wh_client_set_layer(client->prev_layer, client);
 
     if (xdg_data->toplevel->base->initialized)
     {

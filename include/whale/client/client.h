@@ -3,19 +3,31 @@
 #define WHALE_CLIENT_CLIENT_H
 
 #include <whale/client/surface.h>
-#include <whale/output/workspace.h>
 #include <whale/types.h>
 #include <wlr/types/wlr_scene.h>
+
+struct whale_workspace;
+
+typedef enum
+{
+    WH_CLIENT_LAYER_UNDEFINED,
+    WH_CLIENT_LAYER_BG,
+    WH_CLIENT_LAYER_TILING,
+    WH_CLIENT_LAYER_FLOATING,
+    WH_CLIENT_LAYER_FULLSCREEN,
+    WH_CLIENT_LAYER_OVERLAY,
+    WH_CLIENT_LAYER_COUNT
+} WhaleClientLayer;
 
 typedef struct whale_client
 {
     WhaleSurface* surface;
     struct wlr_scene_tree* scene_tree;
 
-    WhaleWorkspace* workspace;
+    struct whale_workspace* workspace;
 
-    WhaleLayout prev_layout;
-    WhaleLayout layout;
+    WhaleClientLayer prev_layer;
+    WhaleClientLayer layer;
 
     bool requested_map;
 
@@ -38,7 +50,7 @@ void wh_client_unmap(WhaleClient* client);
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client);
 void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client);
 void wh_client_set_active(bool active, WhaleClient* client);
-void wh_client_set_layout(WhaleLayout layout, WhaleClient* client);
+void wh_client_set_layer(WhaleClientLayer layer, WhaleClient* client);
 
 void wh_client_raise_to_top(WhaleClient* client);
 
