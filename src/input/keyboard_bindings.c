@@ -117,6 +117,8 @@ static void move_client_to_workspace(const BindingCallbackArg* arg)
     wh_workspace_bind_client(client, new_ws);
 
     wh_client_unmap(client);
+
+    wh_seat_refocus_input(true);
 }
 
 static void exit_whale(const BindingCallbackArg*)
