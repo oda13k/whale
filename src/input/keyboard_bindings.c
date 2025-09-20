@@ -126,6 +126,64 @@ static void exit_whale(const BindingCallbackArg*)
     wh_compositor_request_exit();
 }
 
+static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
+{
+    WhaleSurface* surface = wh_keyboard_get_focused_surface();
+    if (!surface)
+        return;
+
+    WhaleClient* focused_client = wh_client_from_surface(surface);
+    WhaleWorkspace* ws = focused_client->workspace;
+    WH_ASSERT_SANITY(ws);
+
+    size_t next_client_idx = 0;
+    s8 direction = arg->signed_8;
+    if (direction == 1)
+    {
+        VEC_FOR_EACH (client, &ws->clients)
+        {
+            if (*client == focused_client)
+                break;
+
+            ++next_client_idx;
+        }
+
+        if (next_client_idx-- == 0)
+            next_client_idx = VEC_GET_LENGTH(&ws->clients) - 1;
+    }
+    else if (direction == -1)
+    {
+        VEC_FOR_EACH (client, &ws->clients)
+        {
+            ++next_client_idx;
+
+            if (*client == focused_client)
+                break;
+        }
+
+        if (next_client_idx >= VEC_GET_LENGTH(&ws->clients))
+            next_client_idx = 0;
+    }
+    else
+        WH_ASSERT_NOT_REACHED();
+
+    wh_keyboard_focus_surface(VEC_AT(next_client_idx, &ws->clients)->surface);
+    // NOTE: Should we focus the pointer as well?
+}
+
+static void rotate_client_array(const BindingCallbackArg*)
+{
+    WhaleOutput* output = wh_output_get_focused();
+    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
+
+    if (VEC_GET_LENGTH(&ws->clients) <= 1)
+        return;
+
+    WhaleClient* first = VEC_REMOVE_AT(0, &ws->clients);
+    VEC_PUSH(first, &ws->clients);
+    wh_workspace_arrange(ws);
+}
+
 static void on_keyboard_bindings_config_changed()
 {
     VEC_CLEAR(&g_keyboard_bindings);
@@ -256,6 +314,23 @@ static void on_keyboard_bindings_config_changed()
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_q,
                                      .modifiers = MOD_IMPORTANT,
                                      .callback = exit_whale};
+    VEC_PUSH(binding, &g_keyboard_bindings);
+
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_Return,
+                                     .modifiers = MOD_NORMAL,
+                                     .callback = focus_nex_client_on_workspace,
+                                     .arg = {.signed_8 = 1}};
+    VEC_PUSH(binding, &g_keyboard_bindings);
+
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_BackSpace,
+                                     .modifiers = MOD_NORMAL,
+                                     .callback = focus_nex_client_on_workspace,
+                                     .arg = {.signed_8 = -1}};
+    VEC_PUSH(binding, &g_keyboard_bindings);
+
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_Tab,
+                                     .modifiers = MOD_NORMAL,
+                                     .callback = rotate_client_array};
     VEC_PUSH(binding, &g_keyboard_bindings);
 }
 
