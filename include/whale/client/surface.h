@@ -117,7 +117,7 @@ void wh_surface_set_position_relative(
     const WhalePosition2D* pos, WhaleSurface* surface
 );
 
-int wh_surface_layout_to_surface_coords(
+void wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,
     const WhalePosition2D* layout_coords,
     WhalePosition2D* surface_coords

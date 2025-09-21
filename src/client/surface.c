@@ -1,6 +1,5 @@
 
 #include <stdlib.h>
-#include <whale/client/client.h>
 #include <whale/client/surface.h>
 #include <whale/compositor.h>
 #include <whale/debug.h>
@@ -106,12 +105,6 @@ static void on_surface_destroy(struct wl_listener* listener, void*)
 {
     WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, destroy);
     wh_surface_destroy(surface);
-}
-
-static WhaleSurface* surface_from_scene_node(const struct wlr_scene_node* node)
-{
-    WH_ASSERT_SANITY(node->data);
-    return node->data;
 }
 
 WhaleSurface* wh_surface_new(
@@ -245,27 +238,28 @@ void wh_surface_set_position_relative(
     );
 }
 
-int wh_surface_layout_to_surface_coords(
+void wh_surface_layout_to_surface_coords(
     WhaleSurface* surface,
     const WhalePosition2D* layout_coords,
     WhalePosition2D* surface_coords
 )
 {
-    WhaleClient* client = wh_client_from_surface(surface);
-    WhaleGeometry2D geom;
-    wh_client_get_geometry(&geom, client);
+    // FIXME: the tree walking could be calculated once when the window is moved
+    // and then cached until the next move happens.
+    WhalePosition2D pos = {0};
 
-    /* Follow the parent tree and taking into account each parent's position */
-    while (surface)
+    const struct wlr_scene_tree* tree = surface->scene_surface_tree;
+    while (tree)
     {
-        geom.pos.x += surface->scene_surface_tree->node.x;
-        geom.pos.y += surface->scene_surface_tree->node.y;
-        surface = surface->parent;
+        const struct wlr_scene_node* node = &tree->node;
+        pos.x += node->x;
+        pos.y += node->y;
+
+        tree = tree->node.parent;
     }
 
-    surface_coords->x = layout_coords->x - geom.pos.x;
-    surface_coords->y = layout_coords->y - geom.pos.y;
-    return 0;
+    surface_coords->x = layout_coords->x - pos.x;
+    surface_coords->y = layout_coords->y - pos.y;
 }
 
 void wh_surface_register_commit_cb(
