@@ -166,6 +166,9 @@ void wh_client_set_layer(WhaleClientLayer layer, WhaleClient* client)
     client->prev_layer = client->layer;
     client->layer = layer;
     wh_scene_tree_set_layer(client->scene_tree, client->layer);
+
+    WH_ASSERT_SANITY(client->driver.set_tiled);
+    client->driver.set_tiled(layer == WH_CLIENT_LAYER_TILING, client);
 }
 
 void wh_client_raise_to_top(WhaleClient* client)

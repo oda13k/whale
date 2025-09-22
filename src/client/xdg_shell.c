@@ -22,6 +22,7 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/edges.h>
 
 static struct wlr_xdg_shell* g_xdg_shell;
 static struct wlr_xdg_decoration_manager_v1* g_xdg_decoration_manager;
@@ -238,6 +239,20 @@ static void xdg_toplevel_set_active(bool active, WhaleClient* client)
     wlr_xdg_toplevel_set_activated(xdg_data->toplevel, active);
 }
 
+static void xdg_toplevel_set_tiled(bool tiled, WhaleClient* client)
+{
+    WhaleXDGToplevelData* xdg_data =
+        XDG_TOPLEVEL_DATA_FROM_SURFACE(client->surface);
+
+    u32 edges;
+    if (tiled)
+        edges = WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT;
+    else
+        edges = WLR_EDGE_NONE;
+
+    wlr_xdg_toplevel_set_tiled(xdg_data->toplevel, edges);
+}
+
 static WhaleClient* xdg_toplevel_get_parent(WhaleClient* client)
 {
     WhaleXDGToplevelData* xdg_data =
@@ -408,6 +423,7 @@ static void on_xdg_toplevel_new(struct wl_listener*, void* data)
     /* Client drivers, stuff that only makes sense to have on clients and not on
      * all surfaces. */
     client->driver.set_active = xdg_toplevel_set_active;
+    client->driver.set_tiled = xdg_toplevel_set_tiled;
     client->driver.get_parent = xdg_toplevel_get_parent;
     client->driver.close = xdg_toplevel_close;
 

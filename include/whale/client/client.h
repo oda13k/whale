@@ -34,6 +34,7 @@ typedef struct whale_client
     struct
     {
         void (*set_active)(bool active, struct whale_client* client);
+        void (*set_tiled)(bool tiled, struct whale_client* client);
         struct whale_client* (*get_parent)(struct whale_client* client);
         void (*close)(struct whale_client* client);
     } driver;
