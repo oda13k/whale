@@ -20,7 +20,7 @@ typedef int64_t s64;
 
 #define WH_SIZE_UNDEFINED 0
 typedef u32 wh_dim_t;
-typedef s32 wh_coord_t;
+typedef double wh_coord_t;
 
 typedef struct
 {
