@@ -233,8 +233,14 @@ void wh_surface_set_position_relative(
     const WhalePosition2D* pos, WhaleSurface* surface
 )
 {
+    if (pos->x == surface->scene_surface_tree->node.x &&
+        pos->y == surface->scene_surface_tree->node.y)
+        return;
+
     wlr_scene_node_set_position(
-        &surface->scene_surface_tree->node, pos->x, pos->y
+        &surface->scene_surface_tree->node,
+        CAST_DBL_TO_INT(pos->x),
+        CAST_DBL_TO_INT(pos->y)
     );
 }
 

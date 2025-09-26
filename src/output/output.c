@@ -41,8 +41,8 @@ typedef struct
     VEC(OutputConfig) configs;
 } OutputSetup;
 
+static struct wlr_output_layout* g_output_layout;
 static VEC(WhaleOutput*) g_outputs;
-
 static VEC(OutputSetup) g_output_setups;
 
 static int output_workspaces_init(WhaleOutput* output)
@@ -113,7 +113,7 @@ static void output_workspaces_destroy(WhaleOutput* output)
 
 static void on_output_frame(struct wl_listener* listener, void*)
 {
-    WhaleOutput* output = wl_container_of(listener, output, listener_frame);
+    WhaleOutput* output = wl_container_of(listener, output, listeners.frame);
 
     wlr_scene_output_commit(output->scene_output, NULL);
 
@@ -124,17 +124,17 @@ static void on_output_frame(struct wl_listener* listener, void*)
 
 static void on_output_destroy(struct wl_listener* listener, void*)
 {
-    WhaleOutput* output = wl_container_of(listener, output, listener_destroy);
+    WhaleOutput* output = wl_container_of(listener, output, listeners.destroy);
 
-    UNLISTEN(&output->listener_destroy);
-    UNLISTEN(&output->listener_frame);
-    UNLISTEN(&output->listener_request_state);
+    UNLISTEN(&output->listeners.destroy);
+    UNLISTEN(&output->listeners.frame);
+    UNLISTEN(&output->listeners.request_state);
 
     VEC_REMOVE(output, &g_outputs);
 
+    wlr_output_layout_remove(g_output_layout, output->wlr_output);
     wh_scene_detach_output(output);
 
-    // outputs_reconfigure()
     output_workspaces_destroy(output);
 
     free(output);
@@ -154,11 +154,6 @@ static void on_output_request_state(struct wl_listener*, void* data)
         ev->output->height,
         ev->output->refresh / 1000.f
     );
-}
-
-static WhaleOutput* wh_output_from_wlr_output(struct wlr_output* wlr_output)
-{
-    return wlr_output->data;
 }
 
 static int output_set_mode(const OutputConfig* config, WhaleOutput* output)
@@ -263,6 +258,12 @@ done:
     return 0;
 }
 
+static void output_set_position(const WhalePosition2D* pos, WhaleOutput* output)
+{
+    wlr_output_layout_add(g_output_layout, output->wlr_output, pos->x, pos->y);
+    wlr_scene_output_set_position(output->scene_output, pos->x, pos->y);
+}
+
 static int output_apply_config(const OutputConfig* config, WhaleOutput* output)
 {
     if (output_set_mode(config, output) < 0)
@@ -270,8 +271,11 @@ static int output_apply_config(const OutputConfig* config, WhaleOutput* output)
 
     if (!config->disabled)
     {
-        if (wh_scene_attach_output(output, config->x, config->y) < 0)
+        if (wh_scene_attach_output(output) < 0)
             return -1;
+
+        WhalePosition2D pos = {.x = config->x, .y = config->y};
+        output_set_position(&pos, output);
     }
 
     wh_log(
@@ -326,15 +330,19 @@ static const OutputConfig* output_get_config_for_output(WhaleOutput* output)
         .disabled = false
     };
 
-    OutputSetup* setup = output_get_currently_matched_setup();
+    /*OutputSetup* setup = output_get_currently_matched_setup();
     if (!setup)
-        return &default_config;
+        return &default_config; */
+
+    OutputSetup* setup = &VEC_AT(0, &g_output_setups);
 
     VEC_FOR_EACH (config, &setup->configs)
     {
         if (config->id == output->id)
             return config;
     }
+
+    return &default_config;
 
     WH_ASSERT_NOT_REACHED();
 }
@@ -403,45 +411,53 @@ static void on_new_output(struct wlr_output* wlr_output)
     }
 
     /* Set the output's event listeners */
-    LISTEN(&wlr_output->events.frame, &output->listener_frame, on_output_frame);
+    LISTEN(
+        &wlr_output->events.frame, &output->listeners.frame, on_output_frame
+    );
 
     LISTEN(
         &wlr_output->events.destroy,
-        &output->listener_destroy,
+        &output->listeners.destroy,
         on_output_destroy
     );
 
     LISTEN(
         &wlr_output->events.request_state,
-        &output->listener_request_state,
+        &output->listeners.request_state,
         on_output_request_state
     );
 }
 
+WH_CALLBACK(output_layout_change, struct wl_listener*, void*)
+{
+    struct wlr_output_layout_output* output_layout_output;
+    wl_list_for_each(output_layout_output, &g_output_layout->outputs, link)
+    {
+        WhaleOutput* output = output_layout_output->output->data;
+        wh_workspace_arrange(output->active_workspace);
+    }
+}
+
 int wh_output_init()
 {
-    // float color[] = {0x12 / 255.f, 0x12 / 255.f, 0x12 / 255.f, 0xFF /
-    // 255.f}; comp->root_bg_rect =
-    //     wlr_scene_rect_create(&comp->root_scene->tree, 0, 0, color);
+    g_output_layout = wlr_output_layout_create(wh_compositor_get_wl_display());
+    if (!g_output_layout)
+    {
+        wh_log(ERR, "output: Failed to create output layout.");
+        return -1;
+    }
 
     VEC_INIT(&g_outputs);
     VEC_INIT(&g_output_setups);
 
     wh_compositor_set_new_output_callback(on_new_output);
 
+    WH_LISTEN(&g_output_layout->events.change, output_layout_change);
+
     OutputSetup setup;
     VEC_INIT(&setup.configs);
 
     OutputConfig config = {.id = 0xA3483C03, .disabled = true};
-    VEC_PUSH(config, &setup.configs);
-
-    config = (OutputConfig){.id = 0xDB854503,
-                            .x = 1080,
-                            .y = 420,
-                            .width = 1920,
-                            .height = 1080,
-                            .refresh_rate_hz = 60,
-                            .rotation = OUTPUT_ROTATION_NONE};
     VEC_PUSH(config, &setup.configs);
 
     config = (OutputConfig){.id = 0x8EB1936B,
@@ -451,6 +467,15 @@ int wh_output_init()
                             .height = 1080,
                             .refresh_rate_hz = 60,
                             .rotation = OUTPUT_ROTATION_CLOCKWISE};
+    VEC_PUSH(config, &setup.configs);
+
+    config = (OutputConfig){.id = 0xDB854503,
+                            .x = 1080,
+                            .y = 420,
+                            .width = 1920,
+                            .height = 1080,
+                            .refresh_rate_hz = 60,
+                            .rotation = OUTPUT_ROTATION_NONE};
     VEC_PUSH(config, &setup.configs);
 
     VEC_PUSH(setup, &g_output_setups);
@@ -468,11 +493,16 @@ WhaleOutput* wh_output_get_main()
 
 void wh_output_get_geometry(WhaleGeometry2D* out_geom, WhaleOutput* output)
 {
-    wh_scene_get_output_position(output, &out_geom->pos);
+    struct wlr_box output_geom = {0};
+    wlr_output_layout_get_box(
+        g_output_layout, output->wlr_output, &output_geom
+    );
 
     bool flip_sides = output->wlr_output->transform == WL_OUTPUT_TRANSFORM_90 ||
                       output->wlr_output->transform == WL_OUTPUT_TRANSFORM_180;
 
+    out_geom->pos.x = output_geom.x;
+    out_geom->pos.y = output_geom.y;
     out_geom->size.w =
         flip_sides ? output->wlr_output->height : output->wlr_output->width;
     out_geom->size.h =
@@ -523,5 +553,28 @@ WhaleOutput* wh_output_get_focused()
     WhalePosition2D cursor_pos;
     wh_pointer_get_pos(&cursor_pos);
 
-    return wh_scene_get_output_at(&cursor_pos);
+    struct wlr_output* wlr_output = wlr_output_layout_output_at(
+        g_output_layout, cursor_pos.x, cursor_pos.y
+    );
+
+    if (!wlr_output)
+        return NULL;
+
+    return wlr_output->data;
+}
+
+void wh_output_layout_attach_pointer(struct wlr_cursor* pointer)
+{
+    wlr_cursor_attach_output_layout(pointer, g_output_layout);
+}
+
+WhaleOutput* wh_output_get_at(const WhalePosition2D* pos)
+{
+    struct wlr_output* wlr_output =
+        wlr_output_layout_output_at(g_output_layout, pos->x, pos->y);
+
+    if (wlr_output)
+        return wlr_output->data;
+
+    return nullptr;
 }

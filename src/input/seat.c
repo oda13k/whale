@@ -82,7 +82,7 @@ void wh_seat_destroy()
     g_seat = nullptr;
 }
 
-WhaleSurface* wh_seat_refocus_input(bool force_keyboard)
+WhaleSurface* wh_seat_refocus_input(bool focus_keyboard)
 {
     WhalePosition2D pointer_pos;
     wh_pointer_get_pos(&pointer_pos);
@@ -96,11 +96,8 @@ WhaleSurface* wh_seat_refocus_input(bool force_keyboard)
             wh_pointer_set_texture("default");
         }
 
-        if (wh_keyboard_get_focused_surface() &&
-            (wh_pointer_focus_follows_pointer() || force_keyboard))
-        {
+        if (wh_keyboard_get_focused_surface() && focus_keyboard)
             wh_keyboard_unfocus_unchecked();
-        }
 
         return nullptr;
     }
@@ -109,7 +106,7 @@ WhaleSurface* wh_seat_refocus_input(bool force_keyboard)
     wh_surface_layout_to_surface_coords(surface, &pointer_pos, &surface_coords);
 
     wh_pointer_focus_surface(&surface_coords, surface);
-    if (wh_pointer_focus_follows_pointer() || force_keyboard)
+    if (focus_keyboard)
         wh_keyboard_focus_surface(surface);
 
     return surface;

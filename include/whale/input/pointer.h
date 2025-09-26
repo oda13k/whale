@@ -24,6 +24,4 @@ void wh_pointer_set_texture(const char* name);
 
 void wh_pointer_get_pos(WhalePosition2D* out_pos);
 
-bool wh_pointer_focus_follows_pointer();
-
 #endif // !WHALE_INPUT_POINTER_H

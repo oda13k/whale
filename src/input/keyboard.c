@@ -246,3 +246,12 @@ WhaleSurface* wh_keyboard_get_focused_surface()
 {
     return g_focused_surface;
 }
+
+bool wh_keyboard_is_modifier_active(u32 mod)
+{
+    const u32 modifiers = wlr_keyboard_get_modifiers(
+        &g_keyboard_group.wlr_keyboard_group->keyboard
+    );
+
+    return WH_KEYBOARD_MODS_DISCARD_CAPS(modifiers) == mod;
+}

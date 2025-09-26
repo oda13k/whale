@@ -7,7 +7,36 @@
 #include <whale/output/workspace.h>
 #include <whale/utils/vector.h>
 
-static bool wh_client_is_implicit_floating(WhaleClient* client)
+#define IS_TILED(_client) ((_client)->layer == WH_LAYER_TILING)
+
+#define IS_TILED_INTERACTIVE(_client)                                          \
+    ((_client)->prev_layer == WH_LAYER_TILING &&                               \
+     (_client)->is_being_moved_interactively)
+
+#define MIN2(_x, _y) ((_x) < (_y) ? (_x) : (_y))
+#define MAX2(_x, _y) ((_x) > (_y) ? (_x) : (_y))
+#define CLAMP(_lb, _x, _ub)                                                    \
+    ({                                                                         \
+        auto _ret = _x;                                                        \
+        if ((_ret) < (_lb))                                                    \
+            (_ret) = (_lb);                                                    \
+        if ((_ret) > (_ub))                                                    \
+            (_ret) = (_ub);                                                    \
+        _ret;                                                                  \
+    })
+
+typedef struct
+{
+    float primary_split;
+    float primary_min_split;
+    float sec_min_split;
+    size_t primary_client_count;
+    size_t client_count;
+    WhaleTilingOrientation orientation;
+    const WhaleGeometry2D* bounds;
+} TilingPassContext;
+
+static bool is_client_implicit_floating(WhaleClient* client)
 {
     WhaleSize2D min_size, max_size;
     wh_surface_get_minmax_size(&min_size, &max_size, client->surface);
@@ -23,14 +52,18 @@ int wh_workspace_init(WhaleOutput* parent_output, WhaleWorkspace* ws)
     if (VEC_INIT(&ws->clients) < 0)
         return -1;
 
-    ws->default_layer = WH_CLIENT_LAYER_TILING;
-
     ws->parent_output = parent_output;
 
-    /* Defaults for tiling */
-    ws->tiling_ctx.master_client_count = 2;
-    ws->tiling_ctx.master_split_factor =
-        1.f - 1.f / (ws->tiling_ctx.master_client_count + 1);
+    ws->default_layer = WH_LAYER_TILING;
+
+    /* Defaults */
+    ws->tiling_config.primary_client_count = 2;
+    ws->tiling_config.primary_split =
+        1.f - 1.f / (ws->tiling_config.primary_client_count + 1);
+    ws->tiling_config.primary_min_split = 0.15;
+    ws->tiling_config.primary_max_split = 0.85;
+    ws->tiling_config.orientation = HORIZONTAL;
+    ws->tiling_config.dynamic_orientation = true;
 
     return 0;
 }
@@ -54,11 +87,11 @@ int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* workspace)
     client->workspace = workspace;
 
     /* If it's the first bind we'll also set the client's layout. */
-    if (client->layer == WH_CLIENT_LAYER_UNDEFINED)
+    if (client->layer == WH_LAYER_UNDEFINED)
     {
-        WhaleClientLayer layout;
-        if (wh_client_is_implicit_floating(client))
-            layout = WH_CLIENT_LAYER_FLOATING;
+        WhaleLayer layout;
+        if (is_client_implicit_floating(client))
+            layout = WH_LAYER_IMPLICIT_FLOATING;
         else
             layout = workspace->default_layer;
 
@@ -85,101 +118,88 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
     return ws;
 }
 
-static void client_arrange_floating(WhaleClient* client)
+static void client_arrange_implicit_floating(WhaleClient* client)
 {
-    if (!client->workspace)
-        return;
-
     WhaleClient* parent = wh_client_get_parent(client);
-    WhaleGeometry2D bound_geom;
+    WhaleGeometry2D bounds;
     if (parent)
     {
         /* If the client has a parent, we position it center
         relative to it's parent. */
-        wh_client_get_geometry(&bound_geom, parent);
+        wh_client_get_geometry(&bounds, parent);
     }
     else
     {
         /* If the client has no parent, we position it center
         relative to the output. */
-        wh_output_get_geometry(&bound_geom, client->workspace->parent_output);
+        wh_output_get_geometry(&bounds, client->workspace->parent_output);
     }
 
     WhaleGeometry2D cur_geom;
     wh_client_get_geometry(&cur_geom, client);
 
     WhalePosition2D new_pos = {
-        .x = bound_geom.pos.x + bound_geom.size.w / 2 - cur_geom.size.w / 2,
-        .y = bound_geom.pos.y + bound_geom.size.h / 2 - cur_geom.size.h / 2
+        .x = bounds.pos.x + bounds.size.w / 2.f - cur_geom.size.w / 2.f,
+        .y = bounds.pos.y + bounds.size.h / 2.f - cur_geom.size.h / 2.f
     };
 
-    if (cur_geom.pos.x != new_pos.x || cur_geom.pos.y != new_pos.y)
-        wh_client_set_pos(&new_pos, client);
+    WhaleSize2D min_size;
+    client->surface->driver.get_minmax_size(
+        &min_size, nullptr, client->surface
+    );
 
-    // TODO: set the client to it's min size if is floating to fix the weird
-    // gimp bug for the color picker where the size is correct but the elements
-    // inside the window are arragned as if the window had another size.
+    wh_client_set_pos(&new_pos, client);
+
+    if (min_size.w && min_size.h)
+        wh_client_set_size(&min_size, client);
 }
 
 static void client_arrange_tiled(
-    size_t tile_order,
-    size_t tiled_clients_on_output,
-    WhaleWorkspaceTilingContext* ctx,
-    WhaleClient* client
+    TilingPassContext* ctx, WhaleClient* client, size_t client_idx
 )
 {
-    WhaleGeometry2D bounds;
-    wh_output_get_geometry(&bounds, client->workspace->parent_output);
+    const WhaleGeometry2D* bounds = ctx->bounds;
+    WhaleGeometry2D geom;
+    bool flip = ctx->orientation == HORIZONTAL;
 
-    WhaleGeometry2D new_geom;
-
-    /* FIXME: horrible math, there mest be a cleaner way of doing this */
-    if (tile_order < ctx->master_client_count)
+    /* Why is this written like this? Because I just wanted to do some
+     * branchless programming for no real reason. This might just be slower than
+     * if did normally. */
+    if (client_idx < ctx->primary_client_count)
     {
-        new_geom.size.w = roundf(
-            bounds.size.w *
-            (tiled_clients_on_output > ctx->master_client_count
-                 ? ctx->master_split_factor
-                 : 1) /
-            (float)(tiled_clients_on_output > ctx->master_client_count
-                        ? ctx->master_client_count
-                        : tiled_clients_on_output)
-        );
-        new_geom.size.h = bounds.size.h;
+        bool have_sec = ctx->client_count > ctx->primary_client_count;
+        float size_factor = (ctx->primary_split * have_sec + !have_sec) /
+                            (ctx->primary_client_count * have_sec +
+                             ctx->client_count * !have_sec);
 
-        new_geom.pos.x = bounds.pos.x + new_geom.size.w * tile_order;
-        new_geom.pos.y = bounds.pos.y;
+        geom.size.w = roundf(bounds->size.w * (size_factor * flip + !flip));
+        geom.size.h = roundf(bounds->size.h * (size_factor * !flip + flip));
+        geom.pos.x = bounds->pos.x + flip * (geom.size.w * client_idx);
+        geom.pos.y = bounds->pos.y + !flip * (geom.size.h * client_idx);
     }
     else
     {
-        const float secondary_clients =
-            tiled_clients_on_output - ctx->master_client_count;
+        u8 sec_order = client_idx - ctx->primary_client_count;
+        float splitf = (ctx->primary_client_count > 0) * ctx->primary_split;
+        float splitf_comp = (1.f - splitf);
+        float sec_clients_inv =
+            1.f / (ctx->client_count - ctx->primary_client_count);
 
-        const float split_factor =
-            (ctx->master_client_count > 0) * ctx->master_split_factor;
-
-        new_geom.size.w = roundf(bounds.size.w * (1 - split_factor));
-        new_geom.size.h = roundf(bounds.size.h / secondary_clients);
-
-        new_geom.pos.x = bounds.pos.x + roundf(bounds.size.w * split_factor);
-        new_geom.pos.y =
-            bounds.pos.y +
-            new_geom.size.h * (tile_order - ctx->master_client_count);
+        geom.size.w = roundf(
+            bounds->size.w * (splitf_comp * flip + sec_clients_inv * !flip)
+        );
+        geom.size.h = roundf(
+            bounds->size.h * (sec_clients_inv * flip + splitf_comp * !flip)
+        );
+        geom.pos.x = bounds->pos.x + roundf(bounds->size.w * splitf) * flip +
+                     geom.size.w * sec_order * !flip;
+        geom.pos.y = bounds->pos.y + (geom.size.h * sec_order) * flip +
+                     roundf(bounds->size.h * splitf) * !flip;
     }
 
-    WhaleGeometry2D cur_geom;
-    wh_client_get_geometry(&cur_geom, client);
-
-    bool pos_changed =
-        cur_geom.pos.x != new_geom.pos.x || cur_geom.pos.y != new_geom.pos.y;
-    bool size_changed = cur_geom.size.w != new_geom.size.w ||
-                        cur_geom.size.h != new_geom.size.h;
-
-    if (size_changed)
-        wh_surface_set_size(&new_geom.size, client->surface);
-
-    if (pos_changed)
-        wh_client_set_pos(&new_geom.pos, client);
+    wh_client_set_pos(&geom.pos, client);
+    wh_client_set_size(&geom.size, client);
+    wh_client_raise_to_top(client);
 }
 
 static void client_arrange_fullscreen(WhaleClient* client)
@@ -187,83 +207,140 @@ static void client_arrange_fullscreen(WhaleClient* client)
     WhaleGeometry2D bounds;
     wh_output_get_geometry(&bounds, client->workspace->parent_output);
 
-    WhaleGeometry2D client_geom;
-    wh_client_get_geometry(&client_geom, client);
+    wh_client_set_pos(&bounds.pos, client);
+    wh_client_set_size(&bounds.size, client);
+}
 
-    bool pos_changed =
-        bounds.pos.x != client_geom.pos.x || bounds.pos.y != client_geom.pos.y;
-    bool size_changed = bounds.size.w != client_geom.size.w ||
-                        bounds.size.h != client_geom.size.h;
+static void
+workspace_compute_tiling_ctx(WhaleWorkspace* ws, TilingPassContext* ctx)
+{
+    const WhaleWorkspaceTilingConfig* conf = &ws->tiling_config;
+    const WhaleGeometry2D* bounds = ctx->bounds;
 
-    if (pos_changed)
-        wh_client_set_pos(&bounds.pos, client);
+    WhaleTilingOrientation orientation;
+    if (!conf->dynamic_orientation)
+        orientation = conf->orientation;
+    else
+        orientation = bounds->size.h > bounds->size.w ? VERTICAL : HORIZONTAL;
 
-    if (size_changed)
-        wh_client_set_size(&bounds.size, client);
+    wh_dim_t primary_min_size = 0;
+    wh_dim_t sec_min_size = 0;
+
+    size_t client_count = 0;
+    VEC_FOR_EACH_REVERSE(client, &ws->clients)
+    {
+        bool tiled = (IS_TILED(*client) || IS_TILED_INTERACTIVE(*client)) &&
+                     (*client)->requested_map;
+        if (!tiled)
+            continue;
+
+        WhaleSize2D minsize;
+        (*client)->surface->driver.get_minmax_size(
+            &minsize, nullptr, (*client)->surface
+        );
+
+        wh_dim_t size = orientation == VERTICAL ? minsize.h : minsize.w;
+        if (client_count < conf->primary_client_count)
+            primary_min_size += size;
+        else
+            sec_min_size += size;
+
+        ++client_count;
+    }
+
+    wh_dim_t tmp = orientation == VERTICAL ? bounds->size.h : bounds->size.w;
+
+    float primary_min_split = (float)primary_min_size / tmp;
+    float sec_min_split = (float)sec_min_size / tmp;
+    primary_min_split = MIN2(primary_min_split, conf->primary_max_split);
+    sec_min_split = MIN2(sec_min_split, 1 - conf->primary_min_split);
+
+    /* The primary section has min-size priority */
+    if (primary_min_split + sec_min_split > 1)
+        sec_min_split = 1 - primary_min_split;
+
+    ctx->primary_split =
+        CLAMP(primary_min_split, conf->primary_split, 1 - sec_min_split);
+    ctx->primary_min_split = primary_min_split;
+    ctx->sec_min_split = sec_min_split;
+    ctx->primary_client_count = conf->primary_client_count;
+    ctx->client_count = client_count;
+    ctx->orientation = orientation;
 }
 
 void wh_workspace_arrange(WhaleWorkspace* ws)
 {
-    size_t tiled_clients_on_ws = 0;
+    WhaleGeometry2D bounds;
+    wh_output_get_geometry(&bounds, ws->parent_output);
 
-    VEC_FOR_EACH (client, &ws->clients)
-    {
-        tiled_clients_on_ws +=
-            ((*client)->layer == WH_CLIENT_LAYER_TILING &&
-             (*client)->requested_map);
-    }
+    TilingPassContext tiling_ctx;
+    tiling_ctx.bounds = &bounds;
+    workspace_compute_tiling_ctx(ws, &tiling_ctx);
 
-    size_t tile_order = 0;
+    size_t idx = 0;
     VEC_FOR_EACH_REVERSE(client, &ws->clients)
     {
         if (!(*client)->requested_map)
             continue;
 
+        // clang-format off
         switch ((*client)->layer)
         {
-        case WH_CLIENT_LAYER_TILING:
-            client_arrange_tiled(
-                tile_order++, tiled_clients_on_ws, &ws->tiling_ctx, *client
-            );
+        case WH_LAYER_FLOATING:
+            if (IS_TILED_INTERACTIVE(*client))
+        case WH_LAYER_TILING:
+            {
+                client_arrange_tiled(
+                    &tiling_ctx,
+                    *client,
+                    idx++
+                );
+                break;
+            }
             break;
 
-        case WH_CLIENT_LAYER_FLOATING:
-            client_arrange_floating(*client);
+        case WH_LAYER_IMPLICIT_FLOATING:
+            client_arrange_implicit_floating(*client);
             break;
 
-        case WH_CLIENT_LAYER_FULLSCREEN:
+        case WH_LAYER_FULLSCREEN:
             client_arrange_fullscreen(*client);
             break;
 
-        case WH_CLIENT_LAYER_BG:
-        case WH_CLIENT_LAYER_OVERLAY:
+        case WH_LAYER_BG:
+        case WH_LAYER_OVERLAY:
             WH_ASSERT_SANITY(false);
 
-        case WH_CLIENT_LAYER_COUNT:
-        case WH_CLIENT_LAYER_UNDEFINED:
+        case WH_LAYER_COUNT:
+        case WH_LAYER_UNDEFINED:
         default:
             WH_ASSERT_NOT_REACHED();
         }
+        // clang-format on
     }
 }
 
-void wh_workspace_step_tiling_master_split_factor(
-    float step, WhaleWorkspace* ws
-)
+void wh_workspace_step_tiling_primary_split(float step, WhaleWorkspace* ws)
 {
-    float factor = ws->tiling_ctx.master_split_factor + step;
+    WhaleGeometry2D bounds;
+    wh_output_get_geometry(&bounds, ws->parent_output);
 
-    if (factor > 0.8f)
-        factor = 0.8f;
-    else if (factor < 0.2f)
-        factor = 0.2f;
+    TilingPassContext tiling_ctx;
+    tiling_ctx.bounds = &bounds;
+    workspace_compute_tiling_ctx(ws, &tiling_ctx);
 
-    ws->tiling_ctx.master_split_factor = factor;
+    float lb =
+        MAX2(tiling_ctx.primary_min_split, ws->tiling_config.primary_min_split);
+    float ub =
+        MIN2(1 - tiling_ctx.sec_min_split, ws->tiling_config.primary_max_split);
+
+    ws->tiling_config.primary_split =
+        CLAMP(lb, tiling_ctx.primary_split + step, ub);
 }
 
 void wh_workspace_step_tiling_master_client_count(s8 step, WhaleWorkspace* ws)
 {
-    u8 old_client_count = ws->tiling_ctx.master_client_count;
+    u8 old_client_count = ws->tiling_config.primary_client_count;
     u8 new_client_count = old_client_count + step;
 
     /* Over/underflow checks */
@@ -272,5 +349,5 @@ void wh_workspace_step_tiling_master_client_count(s8 step, WhaleWorkspace* ws)
     else if (step > 0 && new_client_count < old_client_count)
         new_client_count = 255;
 
-    ws->tiling_ctx.master_client_count = new_client_count;
+    ws->tiling_config.primary_client_count = new_client_count;
 }

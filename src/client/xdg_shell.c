@@ -140,21 +140,22 @@ WH_SURFACE_CALLBACK(xdg_popup_on_commit_update_position, surface)
 {
     struct wlr_xdg_popup* popup = surface->data;
 
-    WhalePosition2D offset = {0};
-
     struct wlr_xdg_surface* xdg_surf =
         wlr_xdg_surface_try_from_wlr_surface(popup->parent);
 
+    int offsetx = 0;
+    int offsety = 0;
+
     if (xdg_surf)
     {
-        offset.x = xdg_surf->geometry.x;
-        offset.y = xdg_surf->geometry.y;
+        offsetx = xdg_surf->geometry.x;
+        offsety = xdg_surf->geometry.y;
     }
 
     wlr_scene_node_set_position(
         &surface->scene_surface_tree->node,
-        popup->current.geometry.x + offset.x,
-        popup->current.geometry.y + offset.y
+        popup->current.geometry.x + offsetx,
+        popup->current.geometry.y + offsety
     );
 
     return WHALE_SURFACE_CALLBACK_OK;
@@ -186,10 +187,9 @@ xdg_toplevel_set_size(const WhaleSize2D* size, WhaleSurface* surface)
 {
     WhaleXDGToplevelData* xdg_data = XDG_TOPLEVEL_DATA_FROM_SURFACE(surface);
 
-    WH_ASSERT(size->w <= S32_MAX_VALUE);
-    WH_ASSERT(size->h <= S32_MAX_VALUE);
-
-    wlr_xdg_toplevel_set_size(xdg_data->toplevel, (s32)size->w, (s32)size->h);
+    wlr_xdg_toplevel_set_size(
+        xdg_data->toplevel, CAST_U32_TO_S32(size->w), CAST_U32_TO_S32(size->h)
+    );
 }
 
 static void xdg_toplevel_get_size(WhaleSize2D* out_size, WhaleSurface* surface)
@@ -377,9 +377,9 @@ on_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
     bool fullscreen = xdg_data->toplevel->requested.fullscreen;
 
     if (fullscreen)
-        wh_client_set_layer(WH_CLIENT_LAYER_FULLSCREEN, client);
-    else if (client->prev_layer != WH_CLIENT_LAYER_UNDEFINED)
-        wh_client_set_layer(client->prev_layer, client);
+        wh_client_set_layer(WH_LAYER_FULLSCREEN, client);
+    else
+        wh_client_restore_prev_layer(client);
 
     if (xdg_data->toplevel->base->initialized)
     {

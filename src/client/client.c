@@ -5,6 +5,7 @@
 #include <whale/client/client.h>
 #include <whale/compositor.h>
 #include <whale/debug.h>
+#include <whale/input/keyboard.h>
 #include <whale/input/pointer.h>
 #include <whale/input/seat.h>
 #include <whale/log.h>
@@ -60,7 +61,10 @@ WH_SURFACE_CALLBACK(client_on_map, surface)
         wh_workspace_arrange(client->workspace);
 
     wh_client_map(client);
+
+    wh_keyboard_focus_surface(client->surface);
     wh_seat_refocus_input(false);
+
     return WHALE_SURFACE_CALLBACK_OK;
 }
 
@@ -147,7 +151,15 @@ void wh_client_unmap(WhaleClient* client)
 
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
 {
-    wlr_scene_node_set_position(&client->scene_tree->node, pos->x, pos->y);
+    if (pos->x == client->scene_tree->node.x &&
+        pos->y == client->scene_tree->node.y)
+        return;
+
+    wlr_scene_node_set_position(
+        &client->scene_tree->node,
+        CAST_DBL_TO_INT(pos->x),
+        CAST_DBL_TO_INT(pos->y)
+    );
 }
 
 void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client)
@@ -161,14 +173,25 @@ void wh_client_set_active(bool active, WhaleClient* client)
     client->driver.set_active(active, client);
 }
 
-void wh_client_set_layer(WhaleClientLayer layer, WhaleClient* client)
+void wh_client_set_layer(WhaleLayer layer, WhaleClient* client)
 {
     client->prev_layer = client->layer;
     client->layer = layer;
-    wh_scene_tree_set_layer(client->scene_tree, client->layer);
+
+    wh_scene_tree_set_layer(client->scene_tree, layer);
 
     WH_ASSERT_SANITY(client->driver.set_tiled);
-    client->driver.set_tiled(layer == WH_CLIENT_LAYER_TILING, client);
+    client->driver.set_tiled(layer == WH_LAYER_TILING, client);
+}
+
+void wh_client_restore_prev_layer(WhaleClient* client)
+{
+    if (client->prev_layer != WH_LAYER_UNDEFINED)
+        wh_client_set_layer(client->prev_layer, client);
+    else if (client->workspace)
+        wh_client_set_layer(client->workspace->default_layer, client);
+    else
+        wh_client_set_layer(WH_LAYER_UNDEFINED, client);
 }
 
 void wh_client_raise_to_top(WhaleClient* client)

@@ -19,7 +19,7 @@ BUILD_RELEASE         := 0
 EXCLUDE_WARNINGS      :=  -Wno-gnu-statement-expression-from-macro-expansion \
 -Wno-gnu-pointer-arith -Wno-declaration-after-statement -Wno-covered-switch-default \
 -Wno-pre-c23-compat -Wno-padded -Wno-reserved-identifier -Wno-unsafe-buffer-usage \
--Wno-vla
+-Wno-vla -Wno-c++98-compat -Wno-pre-c11-compat
 
 WARNINGS  := -Wall -Wextra -Wimplicit-function-declaration \
 $(EXCLUDE_WARNINGS)

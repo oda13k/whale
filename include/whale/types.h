@@ -8,6 +8,9 @@
 #define KIB (1024)
 #define MIB (1024 * 1024)
 
+#define LIKELY(_x) __builtin_expect(!!(_x), 1)
+#define UNLIKELY(_x) __builtin_expect(!!(_x), 0)
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -39,11 +42,6 @@ typedef struct
     WhalePosition2D pos;
     WhaleSize2D size;
 } WhaleGeometry2D;
-
-#define S32_MAX_VALUE (2'147'483'647)
-
-// #define DIM2COORD_CAST(_dim) ({ WH_ASSERT(_dim <= S32_MAX_VALUE);
-// (wh_coord_t)(_dim); })
 
 #define LISTEN(signal, listener, cb)                                           \
     wl_signal_add(signal, ((listener)->notify = cb, listener))
