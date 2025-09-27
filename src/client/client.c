@@ -7,7 +7,6 @@
 #include <whale/debug.h>
 #include <whale/input/keyboard.h>
 #include <whale/input/pointer.h>
-#include <whale/input/seat.h>
 #include <whale/log.h>
 #include <whale/output/output.h>
 #include <whale/output/scene.h>
@@ -63,7 +62,7 @@ WH_SURFACE_CALLBACK(client_on_map, surface)
     wh_client_map(client);
 
     wh_keyboard_focus_surface(client->surface);
-    wh_seat_refocus_input(false);
+    wh_pointer_update_focus(false);
 
     return WHALE_SURFACE_CALLBACK_OK;
 }
@@ -78,7 +77,7 @@ WH_SURFACE_CALLBACK(client_on_unmap, surface)
     if (client->workspace)
         wh_workspace_arrange(client->workspace);
 
-    wh_seat_refocus_input(true);
+    wh_pointer_update_focus(true);
     return WHALE_SURFACE_CALLBACK_OK;
 }
 

@@ -5,7 +5,6 @@
 #include <whale/debug.h>
 #include <whale/input/keyboard.h>
 #include <whale/input/pointer.h>
-#include <whale/input/seat.h>
 #include <whale/log.h>
 #include <whale/output/output.h>
 #include <whale/output/scene.h>
@@ -76,7 +75,7 @@ static void switch_workspace(const BindingCallbackArg* arg)
 
     WH_ASSERT(arg->unsigned_64 < 256);
     wh_output_activate_workspace((u8)arg->unsigned_64, output);
-    wh_seat_refocus_input(true);
+    wh_pointer_update_focus(true);
 }
 
 static void chvt(const BindingCallbackArg* arg)

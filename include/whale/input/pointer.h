@@ -10,11 +10,7 @@ void wh_pointer_destroy();
 
 int wh_pointer_attach_device(struct wlr_pointer* pointer);
 
-void wh_pointer_focus_surface(
-    const WhalePosition2D* enter_coords, WhaleSurface* surface
-);
-WhaleSurface* wh_pointer_get_focused_surface();
-void wh_pointer_unfocus_unchecked();
+WhaleSurface* wh_pointer_update_focus(bool allow_keyboard);
 
 void wh_pointer_start_interactive_move(WhaleSurface* surface);
 void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface);

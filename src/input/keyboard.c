@@ -227,7 +227,7 @@ void wh_keyboard_focus_surface(WhaleSurface* surface)
         break;
 
     default:
-        unreachable();
+        WH_ASSERT_NOT_REACHED();
     }
 }
 

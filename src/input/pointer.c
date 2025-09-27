@@ -54,6 +54,23 @@ static u32 u32_2max(u32 a, u32 b)
         return b;
 }
 
+static void pointer_focus_surface(
+    const WhalePosition2D* enter_coords, WhaleSurface* surface
+)
+{
+    wlr_seat_pointer_notify_enter(
+        g_seat, surface->wlr_surface, enter_coords->x, enter_coords->y
+    );
+
+    g_pointer.focused_surface = surface;
+}
+
+static void pointer_unfocus_unchecked()
+{
+    wlr_seat_pointer_notify_clear_focus(g_seat);
+    g_pointer.focused_surface = nullptr;
+}
+
 static void handle_interactive_pointer_motion()
 {
     WhaleClient* client = wh_client_from_surface(g_pointer.focused_surface);
@@ -160,7 +177,8 @@ static void handle_pointer_motion(u32 ev_time_ms)
         );
     }
 
-    WhaleSurface* surf = wh_seat_refocus_input(g_config_focus_follows_pointer);
+    WhaleSurface* surf =
+        wh_pointer_update_focus(g_config_focus_follows_pointer);
     if (!surf)
         return;
 
@@ -192,20 +210,18 @@ static void handle_pointer_button(
 
         WhaleSurface* surface = wh_scene_get_topmost_surface_at(&cursor_pos);
 
-        if (!g_config_focus_follows_pointer &&
-            surface != wh_keyboard_get_focused_surface())
-        {
-            if (surface)
-                wh_keyboard_focus_surface(surface);
-            else
-                wh_keyboard_unfocus_unchecked();
-        }
-
         if (surface)
         {
             WhaleClient* client = wh_client_from_surface(surface);
             if (client->layer == WH_LAYER_FLOATING)
                 wh_client_raise_to_top(client);
+
+            if (!g_config_focus_follows_pointer)
+                wh_keyboard_focus_surface(surface);
+        }
+        else if (wh_keyboard_get_focused_surface())
+        {
+            wh_keyboard_unfocus_unchecked();
         }
     }
 
@@ -299,7 +315,7 @@ WH_CALLBACK(seat_request_start_drag, struct wl_listener*, void* data)
 
 WH_CALLBACK(seat_destroy_drag, struct wl_listener*, void*)
 {
-    wh_seat_refocus_input(false);
+    wh_pointer_update_focus(false);
 
     wlr_scene_node_destroy(&g_pointer.drag_icon_tree->node);
     g_pointer.drag_icon_tree = nullptr;
@@ -316,7 +332,7 @@ WH_CALLBACK(seat_start_drag, struct wl_listener*, void* data)
     if (g_pointer.drag_icon_tree)
         wh_log(WARN, "Started a drag, but the previous one hasn't been freed.");
 
-    wh_seat_refocus_input(false);
+    wh_pointer_update_focus(false);
 
     g_pointer.drag_icon_tree = wh_scene_attach_drag_icon(drag->icon);
 
@@ -393,21 +409,37 @@ int wh_pointer_attach_device(struct wlr_pointer* pointer)
     return 0;
 }
 
-void wh_pointer_focus_surface(
-    const WhalePosition2D* enter_coords, WhaleSurface* surface
-)
+WhaleSurface* wh_pointer_update_focus(bool allow_keyboard)
 {
-    wlr_seat_pointer_notify_enter(
-        g_seat, surface->wlr_surface, enter_coords->x, enter_coords->y
-    );
+    WhalePosition2D pointer_pos;
+    wh_pointer_get_pos(&pointer_pos);
 
-    g_pointer.focused_surface = surface;
-}
+    bool focus_keyboard = g_config_focus_follows_pointer && allow_keyboard;
 
-void wh_pointer_unfocus_unchecked()
-{
-    wlr_seat_pointer_notify_clear_focus(g_seat);
-    g_pointer.focused_surface = nullptr;
+    WhaleSurface* surface = wh_scene_get_topmost_surface_at(&pointer_pos);
+    if (!surface)
+    {
+        if (g_pointer.focused_surface)
+        {
+            pointer_unfocus_unchecked();
+            wh_pointer_set_texture("default");
+        }
+
+        if (focus_keyboard && wh_keyboard_get_focused_surface())
+            wh_keyboard_unfocus_unchecked();
+
+        return nullptr;
+    }
+
+    WhalePosition2D surface_coords;
+    wh_surface_layout_to_surface_coords(surface, &pointer_pos, &surface_coords);
+
+    pointer_focus_surface(&surface_coords, surface);
+
+    if (focus_keyboard)
+        wh_keyboard_focus_surface(surface);
+
+    return surface;
 }
 
 void wh_pointer_start_interactive_move(WhaleSurface* surface)
@@ -415,7 +447,7 @@ void wh_pointer_start_interactive_move(WhaleSurface* surface)
     /* Only the keyboard focused (active) surface can request a
     pointer mode. */
     if (surface != wh_keyboard_get_focused_surface() ||
-        POINTER_IS_INTERACTIVE())
+        surface != g_pointer.focused_surface || POINTER_IS_INTERACTIVE())
         return;
 
     g_pointer.mode = WHALE_POINTER_MODE_INTERACTIVE_MOVE;
@@ -436,7 +468,7 @@ void wh_pointer_start_interactive_move(WhaleSurface* surface)
 void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface)
 {
     if (surface != wh_keyboard_get_focused_surface() ||
-        POINTER_IS_INTERACTIVE())
+        surface != g_pointer.focused_surface || POINTER_IS_INTERACTIVE())
         return;
 
     g_pointer.mode = WHALE_POINTER_MODE_INTERACTIVE_RESIZE;
@@ -450,6 +482,9 @@ void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface)
 
 void wh_pointer_drop_interactive()
 {
+    if (!POINTER_IS_INTERACTIVE())
+        return;
+
     g_pointer.mode = WHALE_POINTER_MODE_PASSTHROUGH;
     wh_pointer_set_texture("default");
 
@@ -471,18 +506,13 @@ void wh_pointer_drop_interactive()
 
     /* If we don't force a pointer refocus on the same surface firefox can't
      * be moved again until the surface is refocused by the user. ??? */
-    wh_pointer_unfocus_unchecked();
-    wh_pointer_focus_surface(&surface_coords, surface);
+    pointer_unfocus_unchecked();
+    pointer_focus_surface(&surface_coords, surface);
 }
 
 void wh_pointer_set_texture(const char* name)
 {
     wlr_cursor_set_xcursor(g_pointer.wlr_cursor, g_xcursor_manager, name);
-}
-
-WhaleSurface* wh_pointer_get_focused_surface()
-{
-    return g_pointer.focused_surface;
 }
 
 void wh_pointer_get_pos(WhalePosition2D* out_pos)
