@@ -143,15 +143,8 @@ static void client_arrange_implicit_floating(WhaleClient* client)
         .y = bounds.pos.y + bounds.size.h / 2.f - cur_geom.size.h / 2.f
     };
 
-    WhaleSize2D min_size;
-    client->surface->driver.get_minmax_size(
-        &min_size, nullptr, client->surface
-    );
-
     wh_client_set_pos(&new_pos, client);
-
-    if (min_size.w && min_size.h)
-        wh_client_set_size(&min_size, client);
+    wh_client_set_size(&cur_geom.size, client);
 }
 
 static void client_arrange_tiled(

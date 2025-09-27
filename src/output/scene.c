@@ -53,6 +53,14 @@ int wh_scene_detach_output(WhaleOutput* output)
     return 0;
 }
 
+struct wlr_scene_tree* wh_scene_attach_drag_icon(struct wlr_drag_icon* icon)
+{
+    struct wlr_scene_tree* tree =
+        wlr_scene_drag_icon_create(g_scene_layer_trees[WH_LAYER_POINTER], icon);
+
+    return tree;
+}
+
 struct wlr_scene_tree* wh_scene_tree_new()
 {
     return wlr_scene_tree_create(g_scene_layer_trees[WH_LAYER_UNDEFINED]);

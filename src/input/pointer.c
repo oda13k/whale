@@ -10,6 +10,7 @@
 #include <whale/types.h>
 #include <whale/utils/proc.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 
@@ -34,6 +35,8 @@ typedef struct
         WhalePosition2D client_start_pos;
         u32 resize_edge;
     } interactive;
+
+    struct wlr_scene_tree* drag_icon_tree;
 
 } WhalePointer;
 
@@ -145,12 +148,21 @@ static void handle_interactive_pointer_button(
 
 static void handle_pointer_motion(u32 ev_time_ms)
 {
+    WhalePosition2D cursor_pos;
+    wh_pointer_get_pos(&cursor_pos);
+
+    if (g_pointer.drag_icon_tree)
+    {
+        wlr_scene_node_set_position(
+            &g_pointer.drag_icon_tree->node,
+            CAST_DBL_TO_INT(cursor_pos.x),
+            CAST_DBL_TO_INT(cursor_pos.y)
+        );
+    }
+
     WhaleSurface* surf = wh_seat_refocus_input(g_config_focus_follows_pointer);
     if (!surf)
         return;
-
-    WhalePosition2D cursor_pos;
-    wh_pointer_get_pos(&cursor_pos);
 
     WhalePosition2D surface_coords;
     wh_surface_layout_to_surface_coords(surf, &cursor_pos, &surface_coords);
@@ -275,6 +287,42 @@ WH_CALLBACK(seat_request_set_cursor, struct wl_listener*, void* data)
     );
 }
 
+WH_CALLBACK(seat_request_start_drag, struct wl_listener*, void* data)
+{
+    struct wlr_seat_request_start_drag_event* ev = data;
+
+    if (wlr_seat_validate_pointer_grab_serial(g_seat, ev->origin, ev->serial))
+        wlr_seat_start_pointer_drag(g_seat, ev->drag, ev->serial);
+    else
+        wlr_data_source_destroy(ev->drag->source);
+}
+
+WH_CALLBACK(seat_destroy_drag, struct wl_listener*, void*)
+{
+    wh_seat_refocus_input(false);
+
+    wlr_scene_node_destroy(&g_pointer.drag_icon_tree->node);
+    g_pointer.drag_icon_tree = nullptr;
+
+    WH_UNLISTEN(seat_destroy_drag);
+}
+
+WH_CALLBACK(seat_start_drag, struct wl_listener*, void* data)
+{
+    struct wlr_drag* drag = data;
+    if (!drag->icon)
+        return;
+
+    if (g_pointer.drag_icon_tree)
+        wh_log(WARN, "Started a drag, but the previous one hasn't been freed.");
+
+    wh_seat_refocus_input(false);
+
+    g_pointer.drag_icon_tree = wh_scene_attach_drag_icon(drag->icon);
+
+    WH_LISTEN(&drag->events.destroy, seat_destroy_drag);
+}
+
 int wh_pointer_init(struct wlr_seat* seat)
 {
     g_seat = seat;
@@ -306,6 +354,8 @@ int wh_pointer_init(struct wlr_seat* seat)
     WH_LISTEN(&g_pointer.wlr_cursor->events.frame, pointer_frame);
 
     WH_LISTEN(&seat->events.request_set_cursor, seat_request_set_cursor);
+    WH_LISTEN(&seat->events.request_start_drag, seat_request_start_drag);
+    WH_LISTEN(&seat->events.start_drag, seat_start_drag);
 
     wlr_cursor_warp_closest(g_pointer.wlr_cursor, NULL, 0, 0);
 
@@ -316,6 +366,8 @@ int wh_pointer_init(struct wlr_seat* seat)
 
 void wh_pointer_destroy()
 {
+    WH_UNLISTEN(seat_start_drag);
+    WH_UNLISTEN(seat_request_start_drag);
     WH_UNLISTEN(seat_request_set_cursor);
     WH_UNLISTEN(pointer_frame);
     WH_UNLISTEN(pointer_axis);
@@ -345,9 +397,6 @@ void wh_pointer_focus_surface(
     const WhalePosition2D* enter_coords, WhaleSurface* surface
 )
 {
-    if (surface == g_pointer.focused_surface)
-        return;
-
     wlr_seat_pointer_notify_enter(
         g_seat, surface->wlr_surface, enter_coords->x, enter_coords->y
     );
@@ -404,10 +453,11 @@ void wh_pointer_drop_interactive()
     g_pointer.mode = WHALE_POINTER_MODE_PASSTHROUGH;
     wh_pointer_set_texture("default");
 
-    if (!g_pointer.focused_surface)
+    WhaleSurface* surface = g_pointer.focused_surface;
+    if (!surface)
         return;
 
-    WhaleClient* client = wh_client_from_surface(g_pointer.focused_surface);
+    WhaleClient* client = wh_client_from_surface(surface);
     client->is_being_moved_interactively = false;
     wh_client_restore_prev_layer(client);
     if (client->layer == WH_LAYER_TILING)
@@ -417,14 +467,12 @@ void wh_pointer_drop_interactive()
     wh_pointer_get_pos(&cursor_pos);
 
     WhalePosition2D surface_coords;
-    wh_surface_layout_to_surface_coords(
-        g_pointer.focused_surface, &cursor_pos, &surface_coords
-    );
+    wh_surface_layout_to_surface_coords(surface, &cursor_pos, &surface_coords);
 
     /* If we don't force a pointer refocus on the same surface firefox can't
      * be moved again until the surface is refocused by the user. ??? */
     wh_pointer_unfocus_unchecked();
-    wh_pointer_focus_surface(&surface_coords, g_pointer.focused_surface);
+    wh_pointer_focus_surface(&surface_coords, surface);
 }
 
 void wh_pointer_set_texture(const char* name)
