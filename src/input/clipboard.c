@@ -308,6 +308,14 @@ clipboard_use_client_data_src(struct wlr_data_source* src, u32 serial)
             ? serial
             : wl_display_next_serial(wh_compositor_get_wl_display());
 
+    /* If we don't first set the client source before using our own it leads to
+     * a weird bug where: copy pasting works between clients except in firefox
+     * (go figure) where you can copy from firefox to other clients but if you
+     * try to paste something from another client into firefox it'll always
+     * paste what was last coppied *from* firefox. I'm assuming this is because
+     * firefox tries to be smart and not go through wayland if it detects that
+     * the selection source hasn't changed. */
+    wlr_seat_set_selection(g_seat, src, serial);
     wlr_seat_set_selection(g_seat, effective_src, effective_serial);
 }
 
