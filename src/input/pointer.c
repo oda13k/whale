@@ -54,10 +54,27 @@ static u32 u32_2max(u32 a, u32 b)
         return b;
 }
 
+static void pointer_release_all_buttons()
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    time_t time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+
+    for (size_t i = 0; i < 8; ++i)
+    {
+        wlr_seat_pointer_notify_button(
+            g_seat, time, i + BTN_MOUSE, WL_POINTER_BUTTON_STATE_RELEASED
+        );
+    }
+}
+
 static void pointer_focus_surface(
     const WhalePosition2D* enter_coords, WhaleSurface* surface
 )
 {
+    if (g_pointer.focused_surface && g_pointer.focused_surface != surface)
+        pointer_release_all_buttons();
+
     wlr_seat_pointer_notify_enter(
         g_seat, surface->wlr_surface, enter_coords->x, enter_coords->y
     );
@@ -67,6 +84,8 @@ static void pointer_focus_surface(
 
 static void pointer_unfocus_unchecked()
 {
+    pointer_release_all_buttons();
+
     wlr_seat_pointer_notify_clear_focus(g_seat);
     g_pointer.focused_surface = nullptr;
 }
