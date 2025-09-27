@@ -18,6 +18,7 @@ void wh_pointer_drop_interactive();
 
 void wh_pointer_set_texture(const char* name);
 
+void wh_pointer_set_pos(const WhalePosition2D* pos);
 void wh_pointer_get_pos(WhalePosition2D* out_pos);
 
 #endif // !WHALE_INPUT_POINTER_H

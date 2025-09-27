@@ -33,6 +33,8 @@ typedef struct
 
 static VEC(WhaleKeyboardBinding) g_keyboard_bindings;
 
+static bool g_config_move_cursor_on_focus_change = true;
+
 static void terminate_focused_client(const BindingCallbackArg*)
 {
     WhaleSurface* surface = wh_keyboard_get_focused_surface();
@@ -114,7 +116,7 @@ static void move_client_to_workspace(const BindingCallbackArg* arg)
 
     wh_client_unmap(client);
 
-    wh_seat_refocus_input(true);
+    wh_pointer_update_focus(true);
 }
 
 static void exit_whale(const BindingCallbackArg*)
@@ -163,8 +165,17 @@ static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
     else
         WH_ASSERT_NOT_REACHED();
 
-    wh_keyboard_focus_surface(VEC_AT(next_client_idx, &ws->clients)->surface);
-    // NOTE: Should we focus the pointer as well?
+    WhaleClient* client = VEC_AT(next_client_idx, &ws->clients);
+    wh_keyboard_focus_surface(client->surface);
+
+    if (g_config_move_cursor_on_focus_change)
+    {
+        WhaleGeometry2D geom;
+        wh_client_get_geometry(&geom, client);
+        geom.pos.x += geom.size.w / 2.f;
+        geom.pos.y += geom.size.h / 2.f;
+        wh_pointer_set_pos(&geom.pos);
+    }
 }
 
 static void rotate_client_array(const BindingCallbackArg*)

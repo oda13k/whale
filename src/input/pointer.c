@@ -534,6 +534,16 @@ void wh_pointer_set_texture(const char* name)
     wlr_cursor_set_xcursor(g_pointer.wlr_cursor, g_xcursor_manager, name);
 }
 
+void wh_pointer_set_pos(const WhalePosition2D* pos)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    time_t time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+
+    wlr_cursor_warp(g_pointer.wlr_cursor, nullptr, pos->x, pos->y);
+    handle_pointer_motion(time);
+}
+
 void wh_pointer_get_pos(WhalePosition2D* out_pos)
 {
     out_pos->x = g_pointer.wlr_cursor->x;
