@@ -7,7 +7,12 @@
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_output.h>
 
-int wh_compositor_start();
+typedef struct
+{
+    const char* startup_cmd;
+} WhaleCompositorOptions;
+
+int wh_compositor_start(const WhaleCompositorOptions* options);
 
 bool wh_compositor_running_on_bare_metal();
 

@@ -7,6 +7,7 @@
 #include <whale/debug.h>
 #include <whale/input/seat.h>
 #include <whale/output/scene.h>
+#include <whale/utils/proc.h>
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
 #include <wlr/backend/session.h>
@@ -68,7 +69,7 @@ static int wh_compositor_init_core_interfaces()
     return 0;
 }
 
-int wh_compositor_start()
+int wh_compositor_start(const WhaleCompositorOptions* options)
 {
     wh_log_init();
 
@@ -136,6 +137,9 @@ int wh_compositor_start()
 
     signal(SIGINT, on_close_signal);
     signal(SIGTERM, on_close_signal);
+
+    if (options->startup_cmd)
+        wh_proc_spawn_literal(options->startup_cmd);
 
     wl_display_run(g_comp.display);
 
