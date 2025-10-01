@@ -192,7 +192,7 @@ static void client_arrange_tiled(
 
     wh_client_set_pos(&geom.pos, client);
     wh_client_set_size(&geom.size, client);
-    wh_client_raise_to_top(client);
+    wh_client_lower_to_bottom(client);
 }
 
 static void client_arrange_fullscreen(WhaleClient* client)

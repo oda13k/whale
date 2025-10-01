@@ -46,6 +46,7 @@ void wh_client_set_layer(WhaleLayer layer, WhaleClient* client);
 void wh_client_restore_prev_layer(WhaleClient* client);
 
 void wh_client_raise_to_top(WhaleClient* client);
+void wh_client_lower_to_bottom(WhaleClient* client);
 
 void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client);
 

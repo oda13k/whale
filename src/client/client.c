@@ -198,6 +198,11 @@ void wh_client_raise_to_top(WhaleClient* client)
     wlr_scene_node_raise_to_top(&client->scene_tree->node);
 }
 
+void wh_client_lower_to_bottom(WhaleClient* client)
+{
+    wlr_scene_node_lower_to_bottom(&client->scene_tree->node);
+}
+
 void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client)
 {
     client->surface->driver.get_size(&out_geom->size, client->surface);
