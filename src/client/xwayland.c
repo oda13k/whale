@@ -9,6 +9,7 @@
 #include <whale/input/seat.h>
 #include <whale/log.h>
 #include <whale/output/workspace.h>
+#include <whale/utils/env.h>
 #include <wlr/xwayland.h>
 #include <wlr/xwayland/xwayland.h>
 
@@ -605,8 +606,7 @@ int wh_xwayland_init()
     WH_LISTEN(&g_xwayland->events.ready, xwayland_ready);
     WH_LISTEN(&g_xwayland->events.new_surface, xwayland_new_surface);
 
-    wh_log(INFO, "DISPLAY=%s", g_xwayland->display_name);
-    setenv("DISPLAY", g_xwayland->display_name, true);
+    wh_setenv("DISPLAY", g_xwayland->display_name, true);
 
     return 0;
 }

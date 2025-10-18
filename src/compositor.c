@@ -7,6 +7,7 @@
 #include <whale/debug.h>
 #include <whale/input/seat.h>
 #include <whale/output/scene.h>
+#include <whale/utils/env.h>
 #include <whale/utils/proc.h>
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
@@ -121,15 +122,13 @@ int wh_compositor_start(const WhaleCompositorOptions* options)
     if (!socket)
         wh_die(false, "Failed to create Wayland socket!");
 
-    wh_log(INFO, "WAYLAND_DISPLAY=%s", socket);
-    setenv("WAYLAND_DISPLAY", socket, 1);
+    wh_setenv("WAYLAND_DISPLAY", socket, 1);
+    wh_setenv("MOZ_ENABLE_WAYLAND", "1", true);
+    wh_setenv("GDK_BACKEND", "wayland", true);
+    wh_setenv("ELECTRON_OZONE_PLATFORM_HINT", "wayland", true);
 
     if (!wlr_backend_start(g_comp.backend))
         wh_die(false, "Failed to start wlr backend!");
-
-    setenv("MOZ_ENABLE_WAYLAND", "1", true);
-    setenv("GDK_BACKEND", "wayland", true);
-    setenv("ELECTRON_OZONE_PLATFORM_HINT", "wayland", true);
 
     signal(SIGINT, on_close_signal);
     signal(SIGTERM, on_close_signal);

@@ -48,7 +48,7 @@ src/debug.c src/output/output.c src/output/scene.c src/output/workspace.c \
 src/client/xwayland.c src/client/client.c src/client/surface.c \
 src/client/xdg_shell.c src/input/seat.c src/input/pointer.c \
 src/input/keyboard.c src/input/keyboard_bindings.c \
-src/input/clipboard.c src/utils/toml.c src/utils/proc.c
+src/input/clipboard.c src/utils/toml.c src/utils/proc.c src/utils/env.c
 
 OBJS      := $(addprefix $(BUILD_DIR)/, $(SRC:%.c=%.c.o))
 DEPS      := $(OBJS:%.o=%.d)

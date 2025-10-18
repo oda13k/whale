@@ -9,6 +9,7 @@
 #include <whale/output/output.h>
 #include <whale/output/scene.h>
 #include <whale/types.h>
+#include <whale/utils/env.h>
 #include <whale/utils/math.h>
 #include <whale/utils/proc.h>
 #include <wlr/types/wlr_cursor.h>
@@ -501,7 +502,7 @@ int wh_pointer_init(struct wlr_seat* seat)
         return -1;
     }
 
-    setenv("XCURSOR_SIZE", "24", 1);
+    wh_setenv("XCURSOR_SIZE", "24", 1);
 
     g_relative_pointer_manager =
         wlr_relative_pointer_manager_v1_create(wh_compositor_get_wl_display());
