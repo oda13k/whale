@@ -53,9 +53,9 @@ static void step_tiling_primary_split(const BindingCallbackArg* arg)
     if (!output)
         return;
 
-    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_step_tiling_primary_split(arg->float_32, ws);
-    wh_workspace_arrange(ws);
+    wh_workspace_step_tiling_primary_split(
+        arg->float_32, output->active_workspace
+    );
 }
 
 static void step_tiling_master_client_count(const BindingCallbackArg* arg)
@@ -64,9 +64,9 @@ static void step_tiling_master_client_count(const BindingCallbackArg* arg)
     if (!output)
         return;
 
-    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
-    wh_workspace_step_tiling_master_client_count(arg->signed_8, ws);
-    wh_workspace_arrange(ws);
+    wh_workspace_step_tiling_master_client_count(
+        arg->signed_8, output->active_workspace
+    );
 }
 
 static void switch_workspace(const BindingCallbackArg* arg)
@@ -103,18 +103,8 @@ static void move_client_to_workspace(const BindingCallbackArg* arg)
     if (new_ws == client->workspace)
         return;
 
-    WhaleWorkspace* old_ws = wh_workspace_unbind_client(client);
-
-    /* If the client was managed, we need to re-arrange the workspace, as
-    this is a workspace that is focused right now */
-    if (client->layer == WH_LAYER_TILING)
-        wh_workspace_arrange(old_ws);
-
-    /* We don't need to arrange this workspace here, it'll get re-arranged
-    when we switch to it. */
+    wh_workspace_unbind_client(client);
     wh_workspace_bind_client(client, new_ws);
-
-    wh_client_unmap(client);
 
     wh_pointer_update_focus(true);
 }
@@ -166,7 +156,8 @@ static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
         WH_ASSERT_NOT_REACHED();
 
     WhaleClient* client = VEC_AT(next_client_idx, &ws->clients);
-    wh_keyboard_focus_surface(client->surface);
+    if (client->surface)
+        wh_keyboard_focus_surface(client->surface);
 
     if (g_config_move_cursor_on_focus_change)
     {
@@ -181,14 +172,37 @@ static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
 static void rotate_client_array(const BindingCallbackArg*)
 {
     WhaleOutput* output = wh_output_get_focused();
-    WhaleWorkspace* ws = wh_output_get_active_workspace(output);
+    WhaleWorkspace* ws = output->active_workspace;
 
     if (VEC_GET_LENGTH(&ws->clients) <= 1)
         return;
 
-    WhaleClient* first = VEC_REMOVE_AT(0, &ws->clients);
-    VEC_PUSH(first, &ws->clients);
-    wh_workspace_arrange(ws);
+    WhaleClient* first = nullptr;
+    VEC_FOR_EACH (client, &ws->clients)
+    {
+        if ((*client)->requested_map)
+        {
+            first = *client;
+            break;
+        }
+    }
+
+    if (first)
+    {
+        VEC_REMOVE(first, &ws->clients);
+        VEC_PUSH(first, &ws->clients);
+        wh_workspace_arrange(ws);
+    }
+}
+
+static void make_focused_client_tiled(const BindingCallbackArg*)
+{
+    WhaleSurface* surface = wh_keyboard_get_focused_surface();
+    if (!surface)
+        return;
+
+    WhaleClient* client = wh_client_from_surface(surface);
+    wh_client_set_layer(WH_LAYER_TILING, client);
 }
 
 static void on_keyboard_bindings_config_changed()
@@ -214,13 +228,13 @@ static void on_keyboard_bindings_config_changed()
                                      .arg = {.string = "/bin/librewolf -p"}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_h,
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_j,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
                                      .callback = step_tiling_primary_split,
                                      .arg = {.float_32 = -0.05f}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_l,
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_k,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
                                      .callback = step_tiling_primary_split,
                                      .arg = {.float_32 = 0.05f}};
@@ -336,6 +350,19 @@ static void on_keyboard_bindings_config_changed()
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_Tab,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
                                      .callback = rotate_client_array};
+    VEC_PUSH(binding, &g_keyboard_bindings);
+
+    binding = (WhaleKeyboardBinding){.key = XKB_KEY_space,
+                                     .modifiers = WH_KEYBOARD_MOD_IMPORTANT,
+                                     .callback = make_focused_client_tiled};
+    VEC_PUSH(binding, &g_keyboard_bindings);
+
+    binding = (WhaleKeyboardBinding){
+        .key = XKB_KEY_p,
+        .modifiers = WH_KEYBOARD_MOD_NORMAL,
+        .callback = spawn,
+        .arg = {.string = "/usr/local/bin/dmenu_run -m 0"}
+    };
     VEC_PUSH(binding, &g_keyboard_bindings);
 }
 

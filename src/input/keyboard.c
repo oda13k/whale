@@ -187,7 +187,17 @@ void wh_keyboard_focus_surface(WhaleSurface* surface)
     WhaleClient* old_client =
         g_focused_surface ? wh_client_from_surface(g_focused_surface) : nullptr;
 
-    /* Toplevel client activation follows the keyboard focus */
+    WhaleSurface* target_surface;
+    if (!surface->ignore_keyboard_focus)
+        target_surface = surface;
+    else if (new_client->surface != surface)
+        target_surface = new_client->surface;
+    else
+        return;
+
+    struct wlr_keyboard* keyboard =
+        &g_keyboard_group.wlr_keyboard_group->keyboard;
+
     if (new_client != old_client)
     {
         if (old_client)
@@ -196,39 +206,15 @@ void wh_keyboard_focus_surface(WhaleSurface* surface)
         wh_client_set_active(true, new_client);
     }
 
-    struct wlr_keyboard* keyboard =
-        &g_keyboard_group.wlr_keyboard_group->keyboard;
+    wlr_seat_keyboard_notify_enter(
+        g_seat,
+        target_surface->wlr_surface,
+        keyboard->keycodes,
+        keyboard->num_keycodes,
+        &keyboard->modifiers
+    );
 
-    switch (surface->type)
-    {
-    case SURFACE_TYPE_CLIENT:
-        wlr_seat_keyboard_notify_enter(
-            g_seat,
-            surface->wlr_surface,
-            keyboard->keycodes,
-            keyboard->num_keycodes,
-            &keyboard->modifiers
-        );
-        g_focused_surface = surface;
-        break;
-
-    case SURFACE_TYPE_POPUP:
-    case SURFACE_TYPE_SUBSURFACE:
-        /* If we are a popup or subsurface we want to focus the keyboard
-        on our parent window as per spec. */
-        wlr_seat_keyboard_notify_enter(
-            g_seat,
-            new_client->surface->wlr_surface,
-            keyboard->keycodes,
-            keyboard->num_keycodes,
-            &keyboard->modifiers
-        );
-        g_focused_surface = new_client->surface;
-        break;
-
-    default:
-        WH_ASSERT_NOT_REACHED();
-    }
+    g_focused_surface = target_surface;
 }
 
 void wh_keyboard_unfocus_unchecked()
@@ -238,8 +224,6 @@ void wh_keyboard_unfocus_unchecked()
 
     wlr_seat_keyboard_notify_clear_focus(g_seat);
     g_focused_surface = nullptr;
-
-    wh_pointer_drop_interactive();
 }
 
 WhaleSurface* wh_keyboard_get_focused_surface()
@@ -253,5 +237,5 @@ bool wh_keyboard_is_modifier_active(u32 mod)
         &g_keyboard_group.wlr_keyboard_group->keyboard
     );
 
-    return WH_KEYBOARD_MODS_DISCARD_CAPS(modifiers) == mod;
+    return WH_KEYBOARD_MODS_DISCARD_CAPS(modifiers) & mod;
 }

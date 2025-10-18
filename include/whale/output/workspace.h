@@ -26,6 +26,8 @@ typedef struct
     float primary_min_split;
     float primary_max_split;
 
+    bool respect_client_min_size;
+
     WhaleTilingOrientation orientation;
     /* Automatically choose a tiling orientation based on the output's aspect
      * ratio. */
@@ -52,6 +54,9 @@ int wh_workspace_bind_client(
     struct whale_client* client, WhaleWorkspace* workspace
 );
 WhaleWorkspace* wh_workspace_unbind_client(struct whale_client* client);
+
+void wh_workspace_activate(WhaleWorkspace* workspace);
+void wh_workspace_deactivate(WhaleWorkspace* workspace);
 
 void wh_workspace_arrange(WhaleWorkspace* ws);
 

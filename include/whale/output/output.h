@@ -11,7 +11,7 @@
 
 typedef struct whale_output
 {
-    u32 id;
+    char* id;
 
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
@@ -34,8 +34,6 @@ WhaleOutput* wh_output_get_main();
 void wh_output_get_geometry(WhaleGeometry2D* out_geom, WhaleOutput* output);
 
 int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output);
-
-WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output);
 
 WhaleWorkspace* wh_output_get_workspace(u8 workspace_idx, WhaleOutput* output);
 

@@ -13,6 +13,8 @@ int wh_scene_detach_output(WhaleOutput* output);
 
 struct wlr_scene_tree* wh_scene_attach_drag_icon(struct wlr_drag_icon* icon);
 
+struct wlr_scene_rect* wh_scene_make_bg_rect(const float* color);
+
 struct wlr_scene_tree* wh_scene_tree_new();
 void wh_scene_tree_set_layer(struct wlr_scene_tree* tree, WhaleLayer layer);
 

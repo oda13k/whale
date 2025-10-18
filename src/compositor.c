@@ -25,7 +25,6 @@ typedef struct
     struct wlr_compositor* compositor;
 } WhaleCompositor;
 
-static bool g_on_bare_metal;
 static WhaleCompositor g_comp;
 
 static void (*g_on_new_input_callback)(struct wlr_input_device* dev);
@@ -89,8 +88,6 @@ int wh_compositor_start(const WhaleCompositorOptions* options)
     if (!g_comp.backend)
         wh_die(false, "compositor: Failed to create wlr backend.");
 
-    g_on_bare_metal = wlr_backend_is_drm(g_comp.backend);
-
     g_comp.renderer = wlr_renderer_autocreate(g_comp.backend);
     if (!g_comp.renderer)
         wh_die(false, "compositor: Failed to create wlr renderer.");
@@ -113,27 +110,26 @@ int wh_compositor_start(const WhaleCompositorOptions* options)
     if (wh_output_init() < 0)
         wh_die(false, "compositor: Failed to init output subsystem.");
 
-    if (wh_client_ss_init() < 0)
-        wh_die(false, "compositor: Failed to init client subsystem.");
-
     if (wh_seat_init() < 0)
         wh_die(false, "compositor: Failed to init seat subsystem.");
+
+    if (wh_client_ss_init() < 0)
+        wh_die(false, "compositor: Failed to init client subsystem.");
 
     // RUN()
     const char* socket = wl_display_add_socket_auto(g_comp.display);
     if (!socket)
         wh_die(false, "Failed to create Wayland socket!");
 
+    wh_log(INFO, "WAYLAND_DISPLAY=%s", socket);
     setenv("WAYLAND_DISPLAY", socket, 1);
-
-    /* For debugging purposes */
-    if (getenv("DISPLAY"))
-        unsetenv("DISPLAY");
-
-    wh_log(INFO, "WAYLAND DISPLAY: %s", socket);
 
     if (!wlr_backend_start(g_comp.backend))
         wh_die(false, "Failed to start wlr backend!");
+
+    setenv("MOZ_ENABLE_WAYLAND", "1", true);
+    setenv("GDK_BACKEND", "wayland", true);
+    setenv("ELECTRON_OZONE_PLATFORM_HINT", "wayland", true);
 
     signal(SIGINT, on_close_signal);
     signal(SIGTERM, on_close_signal);
@@ -148,11 +144,6 @@ int wh_compositor_start(const WhaleCompositorOptions* options)
     wh_seat_destroy();
 
     return 0;
-}
-
-bool wh_compositor_running_on_bare_metal()
-{
-    return g_on_bare_metal;
 }
 
 void wh_compositor_change_vt(u8 vt)

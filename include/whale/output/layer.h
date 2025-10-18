@@ -8,11 +8,15 @@ typedef enum
     WH_LAYER_BG,
     WH_LAYER_TILING,
     WH_LAYER_FLOATING,
-    WH_LAYER_IMPLICIT_FLOATING,
+    WH_LAYER_INTERACTIVE,
     WH_LAYER_FULLSCREEN,
-    WH_LAYER_OVERLAY,
+    WH_LAYER_NOTIFICATION,
     WH_LAYER_POINTER,
+    WH_LAYER_OVERLAY,
     WH_LAYER_COUNT
 } WhaleLayer;
+
+#define WH_LAYER_NEEDS_REARRANGE(_layer)                                       \
+    (_layer == WH_LAYER_TILING || _layer == WH_LAYER_FULLSCREEN)
 
 #endif // !WHALE_OUTPUT_LAYER_H

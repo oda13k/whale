@@ -1,10 +1,12 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <whale/compositor.h>
 #include <whale/debug.h>
 #include <whale/log.h>
+#include <wlr/util/log.h>
 
 static const char* g_lvl_translations[] = {
     [FATAL] = "fatal",
@@ -24,18 +26,36 @@ static const char* g_lvl_colors[] = {
 
 static FILE* g_logfile;
 
+static void _wlr_log_callback(
+    enum wlr_log_importance importance, const char* fmt, va_list args
+)
+{
+    if (importance <= WLR_ERROR)
+        wh_vlog(ERR, fmt, args);
+}
+
 int wh_log_init()
 {
     const char* logfile_path = "/home/oda/.whale.log";
 
-    if (wh_compositor_running_on_bare_metal())
+    /* This gets called before we set these two variables, so if they are
+     * already set we'll assume that we're not running on bare metal. */
+    bool on_bare_metal = !getenv("DISPLAY") && !getenv("WAYLAND_DYSPLAY");
+    if (on_bare_metal)
     {
         g_logfile = fopen(logfile_path, "at");
         if (!g_logfile)
+        {
             wh_log(ERR, "log: Failed to open log file for writing.");
+        }
         else
+        {
+            setvbuf(g_logfile, nullptr, _IOLBF, 0);
             fprintf(g_logfile, "\n");
+        }
     }
+
+    wlr_log_init(WLR_ERROR, _wlr_log_callback);
 
     wh_log(INFO, "Whale v0.0.0");
 

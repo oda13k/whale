@@ -61,6 +61,11 @@ struct wlr_scene_tree* wh_scene_attach_drag_icon(struct wlr_drag_icon* icon)
     return tree;
 }
 
+struct wlr_scene_rect* wh_scene_make_bg_rect(const float* color)
+{
+    return wlr_scene_rect_create(g_scene_layer_trees[WH_LAYER_BG], 0, 0, color);
+}
+
 struct wlr_scene_tree* wh_scene_tree_new()
 {
     return wlr_scene_tree_create(g_scene_layer_trees[WH_LAYER_UNDEFINED]);

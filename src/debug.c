@@ -1,7 +1,10 @@
 
+#define UNW_LOCAL_ONLY
 #include <execinfo.h>
+#include <libunwind.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include <whale/debug.h>
 
 [[noreturn]] static void on_sigsegv(int)
@@ -36,14 +39,36 @@ void wh_debug_register_crash_handlers()
 
 void wh_debug_print_stack_trace(LogLevel log_level)
 {
-#define MAX_SYMBOLS 64
-    void* backtrace_buf[MAX_SYMBOLS];
-    int symbol_count = backtrace(backtrace_buf, MAX_SYMBOLS);
-    char** symbols = backtrace_symbols(backtrace_buf, symbol_count);
-#undef MAX_SYMBOLS
-
     wh_log(log_level, "Call trace:");
 
-    for (size_t i = 1; i < (size_t)symbol_count; ++i)
-        wh_log(log_level, "  %s", symbols[i]);
+    unw_cursor_t cursor;
+    unw_context_t context;
+
+    unw_getcontext(&context);
+    unw_init_local(&cursor, &context);
+
+    while (unw_step(&cursor))
+    {
+        unw_word_t offset;
+        char function_name[64] = {0};
+        unw_get_proc_name(&cursor, function_name, 64, &offset);
+
+        bool external_function = strlen(function_name) == 0;
+
+        if (external_function)
+        {
+            unw_word_t off;
+            char elf_name[64] = {0};
+            unw_get_elf_filename(&cursor, elf_name, 64, &off);
+
+            wh_log(
+                log_level, " | \033[38;5;248m %s + 0x%lx\033[0m", elf_name, off
+            );
+        }
+        else
+        {
+            const char* c = strcmp(function_name, "_start") == 0 ? "└" : "├";
+            wh_log(log_level, " %s %s + 0x%lx", c, function_name, offset);
+        }
+    }
 }

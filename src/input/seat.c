@@ -81,3 +81,8 @@ void wh_seat_destroy()
     wlr_seat_destroy(g_seat);
     g_seat = nullptr;
 }
+
+struct wlr_seat* wh_seat_get()
+{
+    return g_seat;
+}

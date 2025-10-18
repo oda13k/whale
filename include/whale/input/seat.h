@@ -6,7 +6,8 @@
 #include <wlr/types/wlr_seat.h>
 
 int wh_seat_init();
-
 void wh_seat_destroy();
+
+struct wlr_seat* wh_seat_get();
 
 #endif // !WHALE_INPUT_SEAT_H

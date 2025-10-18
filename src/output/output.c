@@ -16,6 +16,7 @@
 #include <whale/utils/vector.h>
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
 
 typedef enum
 {
@@ -27,7 +28,7 @@ typedef enum
 
 typedef struct
 {
-    u32 id;
+    const char* id;
     u32 x, y;
     OutputRotation rotation;
     u32 width, height;
@@ -42,6 +43,7 @@ typedef struct
 } OutputSetup;
 
 static struct wlr_output_layout* g_output_layout;
+static struct wlr_scene_rect* g_bg_tree;
 static VEC(WhaleOutput*) g_outputs;
 static VEC(OutputSetup) g_output_setups;
 
@@ -148,8 +150,8 @@ static void on_output_request_state(struct wl_listener*, void* data)
 
     wh_log(
         DEBUG,
-        "output: (%s) requested mode %dx%d@%.2fHz",
-        ev->output->name,
+        "output: [%s] requested mode %dx%d@%.2fHz",
+        ((WhaleOutput*)(ev->output->data))->id,
         ev->output->width,
         ev->output->height,
         ev->output->refresh / 1000.f
@@ -276,18 +278,30 @@ static int output_apply_config(const OutputConfig* config, WhaleOutput* output)
 
         WhalePosition2D pos = {.x = config->x, .y = config->y};
         output_set_position(&pos, output);
-    }
 
-    wh_log(
-        INFO,
-        "output: (%s) %dx%d@%.2f positioned at %ux%u",
-        output->wlr_output->name,
-        output->wlr_output->width,
-        output->wlr_output->height,
-        output->wlr_output->refresh / 1000.f,
-        config->x,
-        config->y
-    );
+        const char* rotation_map[] = {
+            [OUTPUT_ROTATION_NONE] = "",
+            [OUTPUT_ROTATION_CLOCKWISE] = ", rot: clockwise",
+            [OUTPUT_ROTATION_UPSIDE_DOWN] = ", rot: upside down",
+            [OUTPUT_ROTATION_COUNTER_CLOCKWISE] = ", rot: counter clockwise"
+        };
+
+        wh_log(
+            INFO,
+            "output: [%s] %dx%d@%.2fHz, x: %zu, y: %zu%s",
+            output->id,
+            output->wlr_output->width,
+            output->wlr_output->height,
+            output->wlr_output->refresh / 1000.f,
+            (size_t)pos.x,
+            (size_t)pos.y,
+            rotation_map[config->rotation]
+        );
+    }
+    else
+    {
+        wh_log(INFO, "output: [%s] disabled.", output->id);
+    }
 
     return 0;
 }
@@ -338,7 +352,7 @@ static const OutputConfig* output_get_config_for_output(WhaleOutput* output)
 
     VEC_FOR_EACH (config, &setup->configs)
     {
-        if (config->id == output->id)
+        if (strcmp(config->id, output->id) == 0)
             return config;
     }
 
@@ -347,31 +361,42 @@ static const OutputConfig* output_get_config_for_output(WhaleOutput* output)
     WH_ASSERT_NOT_REACHED();
 }
 
-static u32 hash_buf_sdbm(const void* buf, size_t size)
+static int output_make_id(WhaleOutput* output)
 {
-    u32 hash = 0;
+    struct wlr_output* wlr_output = output->wlr_output;
 
-    for (size_t i = 0; i < size; ++i)
-        hash = ((u8*)buf)[i] + (hash << 6) + (hash << 16) - hash;
+#define NO_MAKE "(no make)"
+#define NO_MODEL "(no model)"
+#define NO_SERIAL "(no serial)"
 
-    return hash;
-}
+    const char* make = wlr_output->make ? wlr_output->make : NO_MAKE;
+    const char* model = wlr_output->model ? wlr_output->model : NO_MODEL;
+    const char* serial = wlr_output->serial ? wlr_output->serial : NO_SERIAL;
 
-static u32 output_make_id(WhaleOutput* output)
-{
-    const char* model = output->wlr_output->model;
-    const char* serial = output->wlr_output->serial;
+#undef NO_MAKE
+#undef NO_MODEL
+#undef NO_SERIAL
 
-    if (!model)
-        wh_log(WARN, "output: DRM output does not have a model.");
+    size_t size = strlen(make) + strlen(model) + strlen(serial) + 3;
 
-    if (!serial)
-        wh_log(WARN, "output: DRM output does not have a serial.");
+    output->id = calloc(1, size);
+    if (!output->id)
+    {
+        wh_log(ERR, "output: Failed to allocate id.");
+        return -1;
+    }
 
-    u32 hash1 = model ? hash_buf_sdbm(model, strlen(model)) : 0;
-    u32 hash2 = serial ? hash_buf_sdbm(serial, strlen(serial)) : 0;
+    int st = snprintf(output->id, size, "%s %s %s", make, model, serial);
 
-    return hash1 ^ hash2;
+    if (st < 0 || (size_t)st != size - 1)
+    {
+        wh_log(ERR, "output: Failed to make id.");
+        free(output->id);
+        output->id = nullptr;
+        return -1;
+    }
+
+    return 0;
 }
 
 static void on_new_output(struct wlr_output* wlr_output)
@@ -392,8 +417,7 @@ static void on_new_output(struct wlr_output* wlr_output)
     output->wlr_output = wlr_output;
     wlr_output->data = output;
 
-    if (wlr_output_is_drm(output->wlr_output))
-        output->id = output_make_id(output);
+    output_make_id(output);
 
     if (output_workspaces_init(output) < 0)
     {
@@ -402,7 +426,9 @@ static void on_new_output(struct wlr_output* wlr_output)
         return;
     }
 
-    if (output_apply_config(output_get_config_for_output(output), output) < 0)
+    const OutputConfig* config = output_get_config_for_output(output);
+
+    if (output_apply_config(config, output) < 0)
     {
         VEC_REMOVE(output, &g_outputs);
         output_workspaces_destroy(output);
@@ -434,8 +460,15 @@ WH_CALLBACK(output_layout_change, struct wl_listener*, void*)
     wl_list_for_each(output_layout_output, &g_output_layout->outputs, link)
     {
         WhaleOutput* output = output_layout_output->output->data;
-        wh_workspace_arrange(output->active_workspace);
+
+        VEC_FOR_EACH (ws, &output->workspaces)
+            wh_workspace_arrange(ws);
     }
+
+    struct wlr_box sgeom;
+    wlr_output_layout_get_box(g_output_layout, nullptr, &sgeom);
+    wlr_scene_node_set_position(&g_bg_tree->node, sgeom.x, sgeom.y);
+    wlr_scene_rect_set_size(g_bg_tree, sgeom.width, sgeom.height);
 }
 
 int wh_output_init()
@@ -447,6 +480,20 @@ int wh_output_init()
         return -1;
     }
 
+    wlr_xdg_output_manager_v1_create(
+        wh_compositor_get_wl_display(), g_output_layout
+    );
+
+#define COLOR(hex)                                                             \
+    {((hex >> 24) & 0xFF) / 255.0f,                                            \
+     ((hex >> 16) & 0xFF) / 255.0f,                                            \
+     ((hex >> 8) & 0xFF) / 255.0f,                                             \
+     (hex & 0xFF) / 255.0f}
+
+    // float color[] = COLOR(0x3a6ea5);
+    float color[] = COLOR(0x181a1b);
+    g_bg_tree = wh_scene_make_bg_rect(color);
+
     VEC_INIT(&g_outputs);
     VEC_INIT(&g_output_setups);
 
@@ -457,10 +504,12 @@ int wh_output_init()
     OutputSetup setup;
     VEC_INIT(&setup.configs);
 
-    OutputConfig config = {.id = 0xA3483C03, .disabled = true};
+    OutputConfig config = {
+        .id = "AU Optronics 0xE48D (no serial)", .disabled = true
+    };
     VEC_PUSH(config, &setup.configs);
 
-    config = (OutputConfig){.id = 0x8EB1936B,
+    config = (OutputConfig){.id = "Dell Inc. DELL P2219H 54CXYS2",
                             .x = 0,
                             .y = 0,
                             .width = 1920,
@@ -469,7 +518,7 @@ int wh_output_init()
                             .rotation = OUTPUT_ROTATION_CLOCKWISE};
     VEC_PUSH(config, &setup.configs);
 
-    config = (OutputConfig){.id = 0xDB854503,
+    config = (OutputConfig){.id = "Dell Inc. DELL P2319H DQYXW13",
                             .x = 1080,
                             .y = 420,
                             .width = 1920,
@@ -509,11 +558,6 @@ void wh_output_get_geometry(WhaleGeometry2D* out_geom, WhaleOutput* output)
         flip_sides ? output->wlr_output->width : output->wlr_output->height;
 }
 
-WhaleWorkspace* wh_output_get_active_workspace(WhaleOutput* output)
-{
-    return output->active_workspace;
-}
-
 int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
 {
     size_t max_workspace_idx = VEC_GET_LENGTH(&output->workspaces) - 1;
@@ -525,17 +569,11 @@ int wh_output_activate_workspace(u8 workspace_idx, WhaleOutput* output)
     if (output->active_workspace == new_workspace)
         return 0;
 
-    VEC_FOR_EACH (client, &output->active_workspace->clients)
-        wh_client_unmap(*client);
+    wh_workspace_deactivate(output->active_workspace);
 
     output->active_workspace = new_workspace;
-    VEC_FOR_EACH (client, &output->active_workspace->clients)
-    {
-        if ((*client)->requested_map)
-            wh_client_map(*client);
-    }
+    wh_workspace_activate(output->active_workspace);
 
-    wh_workspace_arrange(output->active_workspace);
     return 0;
 }
 
@@ -552,15 +590,7 @@ WhaleOutput* wh_output_get_focused()
 {
     WhalePosition2D cursor_pos;
     wh_pointer_get_pos(&cursor_pos);
-
-    struct wlr_output* wlr_output = wlr_output_layout_output_at(
-        g_output_layout, cursor_pos.x, cursor_pos.y
-    );
-
-    if (!wlr_output)
-        return NULL;
-
-    return wlr_output->data;
+    return wh_output_get_at(&cursor_pos);
 }
 
 void wh_output_layout_attach_pointer(struct wlr_cursor* pointer)

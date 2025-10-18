@@ -60,6 +60,16 @@
         _ret;                                                                  \
     })
 
+#define CAST_S32_TO_U32(_s32)                                                  \
+    ({                                                                         \
+        _Static_assert(                                                        \
+            _Generic((_s32), s32: 1, default: 0),                              \
+            "Non s32 passed to CAST_S32_TO_U32"                                \
+        );                                                                     \
+        WH_ASSERT((_s32) >= 0);                                                \
+        (u32)(_s32);                                                           \
+    })
+
 [[noreturn]] [[gnu::format(printf, 2, 3)]] void
 wh_die(bool print_call_trace, const char* fmt, ...);
 

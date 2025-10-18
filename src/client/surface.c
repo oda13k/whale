@@ -15,65 +15,43 @@
 #define WH_SURFACE_FROM_LISTENER(_ptr, _listener_name)                         \
     (CONTAINER_OF(_ptr, WhaleSurface, listeners._listener_name))
 
-WH_SURFACE_CALLBACK(subsurface_on_commit_update_position, surface)
+typedef struct
 {
-    struct wlr_subsurface* wlr_subsurface = surface->data;
+    WhaleSurface* surface;
+    struct wlr_subsurface* wlr_subsurface;
+
+    struct
+    {
+        struct wl_listener destroy;
+    } listeners;
+} WhaleSubsurface;
+
+static void on_subsurface_surface_commit(WhaleSurface* surface)
+{
+    WhaleSubsurface* subsurface = surface->data;
+    struct wlr_subsurface* wlr_subsurface = subsurface->wlr_subsurface;
 
     WhalePosition2D pos = {
         .x = wlr_subsurface->current.x, .y = wlr_subsurface->current.y
     };
 
-    wh_surface_set_position_relative(&pos, surface);
-
-    WhaleClient* client = wh_client_from_surface(surface);
-    if (client->workspace)
-        wh_workspace_arrange(client->workspace);
-
-    return WHALE_SURFACE_CALLBACK_OK;
+    wh_surface_set_pos(&pos, surface);
 }
 
-static void on_surface_commit(struct wl_listener* listener, void*)
+static void on_subsurface_surface_destroy(WhaleSurface* surface)
 {
-    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, commit);
+    WhaleSubsurface* subsurface = surface->data;
 
-    VEC_FOR_EACH (cb, &surface->callbacks.commit_callbacks)
-    {
-        if ((*cb)(surface) == WHALE_SURFACE_CALLBACK_REMOVE_SELF)
-        {
-            VEC_REMOVE(*cb, &surface->callbacks.commit_callbacks);
-            --cb;
-        }
-    }
+    UNLISTEN(&subsurface->listeners.destroy);
+    free(subsurface);
 }
 
-static void on_surface_map(struct wl_listener* listener, void*)
+static void on_subsurface_destroy(struct wl_listener* l, void*)
 {
-    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, map);
-    wh_surface_map(surface);
+    WhaleSubsurface* subsurface =
+        CONTAINER_OF(l, WhaleSubsurface, listeners.destroy);
 
-    VEC_FOR_EACH (cb, &surface->callbacks.map_callbacks)
-    {
-        if ((*cb)(surface) == WHALE_SURFACE_CALLBACK_REMOVE_SELF)
-        {
-            VEC_REMOVE(*cb, &surface->callbacks.map_callbacks);
-            --cb;
-        }
-    }
-}
-
-static void on_surface_unmap(struct wl_listener* listener, void*)
-{
-    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, unmap);
-    wh_surface_unmap(surface);
-
-    VEC_FOR_EACH (cb, &surface->callbacks.unmap_callbacks)
-    {
-        if ((*cb)(surface) == WHALE_SURFACE_CALLBACK_REMOVE_SELF)
-        {
-            VEC_REMOVE(*cb, &surface->callbacks.unmap_callbacks);
-            --cb;
-        }
-    }
+    wh_surface_destroy(subsurface->surface);
 }
 
 static void on_surface_new_subsurface(struct wl_listener*, void* data)
@@ -82,29 +60,91 @@ static void on_surface_new_subsurface(struct wl_listener*, void* data)
 
     WhaleSurface* parent = wh_surface_from_wlr_surface(wlr_subsurface->parent);
 
+    WhaleSubsurface* subsurface = calloc(1, sizeof(WhaleSubsurface));
+    if (!subsurface)
+    {
+        wh_log(ERR, "surface: Failed to allocate subsurface.");
+        return;
+    }
+
     WhaleSurface* surface =
-        wh_surface_new(wlr_subsurface->surface, parent->scene_surface_tree);
+        wh_surface_new_child(wlr_subsurface->surface, parent);
+    if (!surface)
+    {
+        wh_log(ERR, "subsurface: Failed to create surface");
+        free(subsurface);
+        return;
+    }
+
+    subsurface->surface = surface;
+    subsurface->wlr_subsurface = wlr_subsurface;
 
     surface->type = SURFACE_TYPE_SUBSURFACE;
-    surface->data = wlr_subsurface;
+    surface->ignore_keyboard_focus = true;
+    surface->data = subsurface;
 
-    wh_surface_register_commit_cb(
-        subsurface_on_commit_update_position, surface
+    surface->commit = on_subsurface_surface_commit;
+    surface->destroy = on_subsurface_surface_destroy;
+    surface->commit(surface);
+
+    LISTEN(
+        &wlr_subsurface->events.destroy,
+        &subsurface->listeners.destroy,
+        on_subsurface_destroy
     );
-
-    /* The surface is now owned by it's parent and will be free'd by it when
-     * the time comes. */
-    surface->parent = parent;
-    VEC_PUSH(surface, &parent->children);
-
-    /* Force an initial update */
-    subsurface_on_commit_update_position(surface);
 }
 
-static void on_surface_destroy(struct wl_listener* listener, void*)
+static void on_surface_commit(struct wl_listener* listener, void*)
 {
-    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, destroy);
-    wh_surface_destroy(surface);
+    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, commit);
+
+    if (surface->commit)
+        surface->commit(surface);
+}
+
+static void on_surface_map(struct wl_listener* listener, void*)
+{
+    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, map);
+    wh_surface_map(surface);
+
+    if (surface->map)
+        surface->map(surface);
+}
+
+static void on_surface_unmap(struct wl_listener* listener, void*)
+{
+    WhaleSurface* surface = WH_SURFACE_FROM_LISTENER(listener, unmap);
+    wh_surface_unmap(surface);
+
+    if (surface->unmap)
+        surface->unmap(surface);
+}
+
+void wh_surface_destroy(WhaleSurface* surface)
+{
+    /* If the surface has chidren destroy them all. */
+    VEC_FOR_EACH (child, &surface->children)
+    {
+        wh_surface_destroy(*child);
+        --child;
+    }
+
+    VEC_DESTROY(&surface->children);
+
+    if (surface->parent)
+        VEC_REMOVE(surface, &surface->parent->children);
+
+    UNLISTEN(&surface->listeners.commit);
+    UNLISTEN(&surface->listeners.map);
+    UNLISTEN(&surface->listeners.unmap);
+    UNLISTEN(&surface->listeners.new_subsurface);
+
+    wlr_scene_node_destroy(&surface->scene_tree->node);
+
+    if (surface->destroy)
+        surface->destroy(surface);
+
+    free(surface);
 }
 
 WhaleSurface* wh_surface_new(
@@ -119,23 +159,22 @@ WhaleSurface* wh_surface_new(
     /* The wlr_surface can point back to our surface. */
     surface->wlr_surface->data = surface;
 
-    surface->scene_surface_tree = wlr_scene_tree_create(parent_tree);
-    wlr_scene_surface_create(surface->scene_surface_tree, surface->wlr_surface);
+    surface->scene_tree = wlr_scene_tree_create(parent_tree);
+    surface->scene_surface =
+        wlr_scene_surface_create(surface->scene_tree, surface->wlr_surface);
 
-    /* Get the 2nd child of the scene_surface_tree (the actual surface buffer)
+    wh_surface_invalidate_position(surface);
+
+    /* Get the 2nd child of the scene_tree (the actual surface buffer)
      * and set the our surface as it's data. Thsi is used to retrieve our
      * surface from a node when we hover over it. */
     struct wlr_scene_node* node = CONTAINER_OF(
-        surface->scene_surface_tree->children.next, struct wlr_scene_node, link
+        surface->scene_tree->children.next, struct wlr_scene_node, link
     );
     WH_ASSERT(node && node->type == WLR_SCENE_NODE_BUFFER);
     node->data = surface;
 
     VEC_INIT(&surface->children);
-
-    VEC_INIT(&surface->callbacks.commit_callbacks);
-    VEC_INIT(&surface->callbacks.map_callbacks);
-    VEC_INIT(&surface->callbacks.unmap_callbacks);
 
     LISTEN(
         &surface->wlr_surface->events.commit,
@@ -161,159 +200,69 @@ WhaleSurface* wh_surface_new(
         on_surface_new_subsurface
     );
 
-    LISTEN(
-        &surface->wlr_surface->events.destroy,
-        &surface->listeners.destroy,
-        on_surface_destroy
-    );
-
     return surface;
-}
-
-void wh_surface_destroy(WhaleSurface* surface)
-{
-    /* If the surface has chidren destroy them all. */
-    VEC_FOR_EACH (child, &surface->children)
-    {
-        wh_surface_destroy(*child);
-        --child;
-    }
-
-    VEC_DESTROY(&surface->children);
-
-    if (surface->parent)
-        VEC_REMOVE(surface, &surface->parent->children);
-
-    UNLISTEN(&surface->listeners.commit);
-    UNLISTEN(&surface->listeners.map);
-    UNLISTEN(&surface->listeners.unmap);
-    UNLISTEN(&surface->listeners.new_subsurface);
-    UNLISTEN(&surface->listeners.destroy);
-
-    VEC_DESTROY(&surface->callbacks.commit_callbacks);
-    VEC_DESTROY(&surface->callbacks.map_callbacks);
-    VEC_DESTROY(&surface->callbacks.unmap_callbacks);
-
-    wlr_scene_node_destroy(&surface->scene_surface_tree->node);
-
-    free(surface);
 }
 
 void wh_surface_map(WhaleSurface* surface)
 {
-    wlr_scene_node_set_enabled(&surface->scene_surface_tree->node, true);
+    wlr_scene_node_set_enabled(&surface->scene_tree->node, true);
 }
 
 void wh_surface_unmap(WhaleSurface* surface)
 {
-    wlr_scene_node_set_enabled(&surface->scene_surface_tree->node, false);
+    wlr_scene_node_set_enabled(&surface->scene_tree->node, false);
 }
 
-void wh_surface_set_size(const WhaleSize2D* size, WhaleSurface* surface)
-{
-    WH_ASSERT_SANITY(surface->driver.set_size);
-    surface->driver.set_size(size, surface);
-}
-
-void wh_surface_get_size(WhaleSize2D* out_size, WhaleSurface* surface)
-{
-    WH_ASSERT_SANITY(surface->driver.get_size);
-    surface->driver.get_size(out_size, surface);
-}
-
-void wh_surface_get_minmax_size(
-    WhaleSize2D* out_min_size, WhaleSize2D* out_max_size, WhaleSurface* surface
+WhaleSurface* wh_surface_new_child(
+    struct wlr_surface* wlr_child_surface, WhaleSurface* surface
 )
 {
-    WH_ASSERT_SANITY(surface->driver.get_minmax_size);
-    surface->driver.get_minmax_size(out_min_size, out_max_size, surface);
+    WhaleSurface* child =
+        wh_surface_new(wlr_child_surface, surface->scene_tree);
+    if (!child)
+    {
+        wh_log(ERR, "surface: Failed to create child surface.");
+        return nullptr;
+    }
+
+    child->parent = surface;
+    VEC_PUSH(child, &surface->children);
+
+    return child;
 }
 
-void wh_surface_set_position_relative(
-    const WhalePosition2D* pos, WhaleSurface* surface
-)
+void wh_surface_set_pos(const WhalePosition2D* pos, WhaleSurface* surface)
 {
-    if (pos->x == surface->scene_surface_tree->node.x &&
-        pos->y == surface->scene_surface_tree->node.y)
+    if (pos->x == surface->scene_tree->node.x &&
+        pos->y == surface->scene_tree->node.y)
         return;
 
     wlr_scene_node_set_position(
-        &surface->scene_surface_tree->node,
+        &surface->scene_tree->node,
         CAST_DBL_TO_INT(pos->x),
         CAST_DBL_TO_INT(pos->y)
     );
+
+    wh_surface_invalidate_position(surface);
 }
 
-void wh_surface_layout_to_surface_coords(
-    WhaleSurface* surface,
-    const WhalePosition2D* layout_coords,
-    WhalePosition2D* surface_coords
-)
+void wh_surface_invalidate_position(WhaleSurface* surface)
 {
-    // FIXME: the tree walking could be calculated once when the window is moved
-    // and then cached until the next move happens.
-    WhalePosition2D pos = {0};
+    surface->layout_pos.x = 0;
+    surface->layout_pos.y = 0;
 
-    const struct wlr_scene_tree* tree = surface->scene_surface_tree;
+    const struct wlr_scene_tree* tree = surface->scene_tree;
     while (tree)
     {
         const struct wlr_scene_node* node = &tree->node;
-        pos.x += node->x;
-        pos.y += node->y;
+        surface->layout_pos.x += node->x;
+        surface->layout_pos.y += node->y;
 
-        tree = tree->node.parent;
+        tree = node->parent;
     }
 
-    surface_coords->x = layout_coords->x - pos.x;
-    surface_coords->y = layout_coords->y - pos.y;
-}
-
-void wh_surface_register_commit_cb(
-    whale_surface_callback_t cb, WhaleSurface* surface
-)
-{
-    if (VEC_INCLUDES(cb, &surface->callbacks.commit_callbacks))
-    {
-        wh_log(
-            DEBUG,
-            "surface: Tried to register the same commit callback multiple times."
-        );
-        return;
-    }
-
-    VEC_PUSH(cb, &surface->callbacks.commit_callbacks);
-}
-
-void wh_surface_register_map_cb(
-    whale_surface_callback_t cb, WhaleSurface* surface
-)
-{
-    if (VEC_INCLUDES(cb, &surface->callbacks.map_callbacks))
-    {
-        wh_log(
-            DEBUG,
-            "surface: Tried to register the same map callback multiple times."
-        );
-        return;
-    }
-
-    VEC_PUSH(cb, &surface->callbacks.map_callbacks);
-}
-
-void wh_surface_register_unmap_cb(
-    whale_surface_callback_t cb, WhaleSurface* surface
-)
-{
-    if (VEC_INCLUDES(cb, &surface->callbacks.unmap_callbacks))
-    {
-        wh_log(
-            DEBUG,
-            "surface: Tried to register the same unmap callback multiple times."
-        );
-        return;
-    }
-
-    VEC_PUSH(cb, &surface->callbacks.unmap_callbacks);
+    VEC_FOR_EACH (child, &surface->children)
+        wh_surface_invalidate_position(*child);
 }
 
 WhaleSurface* wh_surface_from_wlr_surface(const struct wlr_surface* wlr_surface)

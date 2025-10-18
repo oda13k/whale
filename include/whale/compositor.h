@@ -14,8 +14,6 @@ typedef struct
 
 int wh_compositor_start(const WhaleCompositorOptions* options);
 
-bool wh_compositor_running_on_bare_metal();
-
 void wh_compositor_change_vt(u8 vt);
 
 void wh_compositor_request_exit();

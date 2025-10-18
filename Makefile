@@ -1,6 +1,7 @@
 
-CC                                  ?= clang
-PKG_CONFIG                          ?= pkg-config
+CC                                   ?= clang
+LD                                   ?= mold
+PKG_CONFIG                           = pkg-config
 
 BIN_NAME                            ?= whale
 BUILD_DIR                           ?= build
@@ -28,11 +29,15 @@ CFLAGS    := -MD -MP -std=c23 $(WARNINGS) \
 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) \
 -fdiagnostics-color=always -D_POSIX_C_SOURCE=200809L -DWLR_USE_UNSTABLE
 
-LDFLAGS   := -lm
+LDFLAGS   := -lm -lxcb -fuse-ld=$(LD)
 
 ifeq ($(BUILD_DEBUG),1)
-	CFLAGS += -ggdb3 -DWHALE_DEBUG=1
-	LDFLAGS += -Wl,-export-dynamic
+	CFLAGS += -g -DWHALE_DEBUG=1
+	LDFLAGS += -lunwind
+endif
+
+ifeq ($(BUILD_RELEASE),1)
+	CFLAGS += -O2 -DWHALE_RELEASE=1
 endif
 
 CFLAGS    += $(shell ${PKG_CONFIG} --cflags ${PKG_CONFIG_PKGS})
@@ -56,14 +61,14 @@ COMMON_DEPS := Makefile
 all: $(BIN_NAME)
 
 $(BIN_NAME): wayland_protocols .WAIT $(OBJS) $(COMMON_DEPS)
-	@$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@
 	@echo LD $@
+	@$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $@
 
 -include $(DEPS)
 $(BUILD_DIR)/%.c.o: %.c $(COMMON_DEPS)
+	@echo CC $<
 	@mkdir -p $(dir $@)
 	@$(CC) -c $(CFLAGS) -o $@ $<
-	@echo CC $<
 
 .PHONY += wayland_protocols
 wayland_protocols: $(LOCAL_WAYLAND_PROTOCOL_HEADERS)

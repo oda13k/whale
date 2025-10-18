@@ -17,6 +17,8 @@
 // TODO: maybe move this into scene.c
 static VEC(WhaleClient*) g_clients;
 
+static bool g_config_focus_newly_mapped_client = true;
+
 int wh_client_ss_init()
 {
     VEC_INIT(&g_clients);
@@ -35,11 +37,9 @@ int wh_client_ss_init()
     return 0;
 }
 
-WH_SURFACE_CALLBACK(client_on_map, surface)
+static void client_on_map(WhaleSurface* surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
-
-    client->requested_map = true;
 
     if (!client->workspace)
     {
@@ -49,39 +49,50 @@ WH_SURFACE_CALLBACK(client_on_map, surface)
          * destroyed because the workspace's output was disconnected.) */
         WhaleOutput* output = wh_output_get_focused();
         if (output)
-        {
-            wh_workspace_bind_client(
-                client, wh_output_get_active_workspace(output)
-            );
-        }
+            wh_workspace_bind_client(client, output->active_workspace);
     }
 
-    if (client->workspace)
+    if (client->driver->map)
+        client->driver->map(client);
+
+    client->requested_map = true;
+
+    if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace)
         wh_workspace_arrange(client->workspace);
 
     wh_client_map(client);
 
-    wh_keyboard_focus_surface(client->surface);
-    wh_pointer_update_focus(false);
+    wh_client_raise_to_top(client);
 
-    return WHALE_SURFACE_CALLBACK_OK;
+    if (g_config_focus_newly_mapped_client)
+        wh_keyboard_focus_surface(client->surface);
+
+    wh_pointer_update_focus(false);
 }
 
-WH_SURFACE_CALLBACK(client_on_unmap, surface)
+static void client_on_unmap(WhaleSurface* surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
 
     client->requested_map = false;
-    wh_client_unmap(client);
 
-    if (client->workspace)
+    if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace)
         wh_workspace_arrange(client->workspace);
 
+    wh_client_unmap(client);
+
     wh_pointer_update_focus(true);
-    return WHALE_SURFACE_CALLBACK_OK;
 }
 
-WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
+static void client_on_commit(WhaleSurface* surface)
+{
+    WhaleClient* client = wh_client_from_surface(surface);
+
+    if (client->driver->commit)
+        client->driver->commit(client);
+}
+
+WhaleClient* wh_client_new(const WhaleClientDriver* driver, void* driver_ctx)
 {
     WhaleClient* client = calloc(1, sizeof(WhaleClient));
     if (!client)
@@ -94,28 +105,18 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     client->scene_tree = wh_scene_tree_new();
     if (!client->scene_tree)
     {
-        wh_log(ERR, "client: Failed to allocate scene tree.");
+        wh_log(ERR, "client: Failed to create scene tree.");
         free(client);
         return nullptr;
     }
 
-    client->surface = wh_surface_new(wlr_surface, client->scene_tree);
-    if (!client->surface)
-    {
-        wh_log(ERR, "client: Failed to allocate surface.");
-        wlr_scene_node_destroy(&client->scene_tree->node);
-        free(client);
-        return nullptr;
-    }
-
-    client->surface->type = SURFACE_TYPE_CLIENT;
-    client->surface->data = client;
-
-    wh_surface_register_map_cb(client_on_map, client->surface);
-    wh_surface_register_unmap_cb(client_on_unmap, client->surface);
-
-    /* Unmap the client by default */
-    wh_client_unmap(client);
+    WH_ASSERT_SANITY(driver->set_tiled);
+    WH_ASSERT_SANITY(driver->set_active);
+    WH_ASSERT_SANITY(driver->set_size);
+    WH_ASSERT_SANITY(driver->get_minmax_size);
+    WH_ASSERT_SANITY(driver->close);
+    client->driver = driver;
+    client->driver_ctx = driver_ctx;
 
     /* Keep track of this client */
     VEC_PUSH(client, &g_clients);
@@ -123,15 +124,47 @@ WhaleClient* wh_client_new(struct wlr_surface* wlr_surface)
     return client;
 }
 
+int wh_client_attach_surface(
+    struct wlr_surface* wlr_surface, WhaleClient* client
+)
+{
+    WH_ASSERT_SANITY(!client->surface);
+
+    client->surface = wh_surface_new(wlr_surface, client->scene_tree);
+    if (!client->surface)
+    {
+        wh_log(ERR, "client: Failed to allocate surface.");
+        return -1;
+    }
+
+    client->surface->type = SURFACE_TYPE_CLIENT;
+    client->surface->data = client;
+
+    client->surface->map = client_on_map;
+    client->surface->unmap = client_on_unmap;
+    client->surface->commit = client_on_commit;
+
+    return 0;
+}
+
+void wh_client_detach_surface(WhaleClient* client)
+{
+    WH_ASSERT_SANITY(client->surface);
+
+    /* FIXME: callbacks registered with wh_surface_register_* are destroy here.
+     * Maybe have them be explicitely destroyed? */
+    wh_surface_destroy(client->surface);
+    client->surface = nullptr;
+}
+
 void wh_client_destroy(WhaleClient* client)
 {
     VEC_REMOVE(client, &g_clients);
 
-    /* We don't arrange the workspace here, it was already re-arranged when the
-     * client was unmapped before getting destoryed. */
     wh_workspace_unbind_client(client);
 
-    wh_surface_destroy(client->surface);
+    if (client->surface)
+        wh_client_detach_surface(client);
 
     wlr_scene_node_destroy(&client->scene_tree->node);
 
@@ -159,28 +192,69 @@ void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
         CAST_DBL_TO_INT(pos->x),
         CAST_DBL_TO_INT(pos->y)
     );
+
+    if (client->surface)
+        wh_surface_invalidate_position(client->surface);
 }
 
 void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client)
 {
-    wh_surface_set_size(size, client->surface);
+    client->size = *size;
+    client->driver->set_size(size, client);
 }
 
 void wh_client_set_active(bool active, WhaleClient* client)
 {
-    WH_ASSERT_SANITY(client->driver.set_active);
-    client->driver.set_active(active, client);
+    client->driver->set_active(active, client);
+}
+
+void wh_client_configure(WhaleClient* client)
+{
+    if (client->driver->configure)
+        client->driver->configure(client);
+}
+
+void wh_client_get_minmax_size(
+    WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
+)
+{
+    client->driver->get_minmax_size(min, max, client);
+}
+
+void wh_client_start_interactive(WhaleClient* client)
+{
+    client->interactive = true;
+
+    wh_scene_tree_set_layer(client->scene_tree, WH_LAYER_INTERACTIVE);
+}
+
+void wh_client_drop_interactive(WhaleClient* client)
+{
+    client->interactive = false;
+
+    wh_scene_tree_set_layer(client->scene_tree, client->layer);
+
+    if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace &&
+        client->requested_map)
+        wh_workspace_arrange(client->workspace);
 }
 
 void wh_client_set_layer(WhaleLayer layer, WhaleClient* client)
 {
+    if (layer == client->layer)
+        return;
+
     client->prev_layer = client->layer;
     client->layer = layer;
 
-    wh_scene_tree_set_layer(client->scene_tree, layer);
+    wh_scene_tree_set_layer(client->scene_tree, client->layer);
 
-    WH_ASSERT_SANITY(client->driver.set_tiled);
-    client->driver.set_tiled(layer == WH_LAYER_TILING, client);
+    client->driver->set_tiled(client->layer == WH_LAYER_TILING, client);
+
+    if ((WH_LAYER_NEEDS_REARRANGE(client->prev_layer) ||
+         WH_LAYER_NEEDS_REARRANGE(client->layer)) &&
+        client->workspace && client->requested_map)
+        wh_workspace_arrange(client->workspace);
 }
 
 void wh_client_restore_prev_layer(WhaleClient* client)
@@ -189,8 +263,6 @@ void wh_client_restore_prev_layer(WhaleClient* client)
         wh_client_set_layer(client->prev_layer, client);
     else if (client->workspace)
         wh_client_set_layer(client->workspace->default_layer, client);
-    else
-        wh_client_set_layer(WH_LAYER_UNDEFINED, client);
 }
 
 void wh_client_raise_to_top(WhaleClient* client)
@@ -205,21 +277,14 @@ void wh_client_lower_to_bottom(WhaleClient* client)
 
 void wh_client_get_geometry(WhaleGeometry2D* out_geom, WhaleClient* client)
 {
-    client->surface->driver.get_size(&out_geom->size, client->surface);
+    out_geom->size = client->size;
     out_geom->pos.x = client->scene_tree->node.x;
     out_geom->pos.y = client->scene_tree->node.y;
 }
 
-WhaleClient* wh_client_get_parent(WhaleClient* client)
-{
-    WH_ASSERT_SANITY(client->driver.get_parent);
-    return client->driver.get_parent(client);
-}
-
 void wh_client_close(WhaleClient* client)
 {
-    WH_ASSERT_SANITY(client->driver.close);
-    client->driver.close(client);
+    client->driver->close(client);
 }
 
 WhaleClient* wh_client_from_surface(WhaleSurface* surface)
