@@ -71,6 +71,8 @@ static int wh_compositor_init_core_interfaces()
 
 int wh_compositor_start(const WhaleCompositorOptions* options)
 {
+    srand(time(nullptr));
+
     wh_log_init();
 
     wh_debug_register_crash_handlers();

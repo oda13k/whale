@@ -490,9 +490,17 @@ int wh_output_init()
      ((hex >> 8) & 0xFF) / 255.0f,                                             \
      (hex & 0xFF) / 255.0f}
 
-    // float color[] = COLOR(0x3a6ea5);
+    float color1[] = COLOR(0x3a6ea5);
     float color[] = COLOR(0x181a1b);
-    g_bg_tree = wh_scene_make_bg_rect(color);
+
+    float* c = nullptr;
+
+    if ((float)rand() / (float)RAND_MAX > 0.5)
+        c = color;
+    else
+        c = color1;
+
+    g_bg_tree = wh_scene_make_bg_rect(c);
 
     VEC_INIT(&g_outputs);
     VEC_INIT(&g_output_setups);
