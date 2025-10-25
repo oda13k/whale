@@ -349,7 +349,7 @@ static void on_xwayland_request_move(struct wl_listener* listener, void*)
 {
     XWaylandClient* xclient = XCLIENT_FROM_LISTENER(listener, request_move);
 
-    wh_pointer_start_interactive_move(xclient->client->surface);
+    wh_pointer_start_interactive_move(BTN_LEFT, xclient->client->surface);
 }
 
 static void

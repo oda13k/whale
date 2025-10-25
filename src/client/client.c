@@ -12,6 +12,7 @@
 #include <whale/output/scene.h>
 #include <whale/output/workspace.h>
 #include <whale/types.h>
+#include <whale/utils/math.h>
 #include <wlr/types/wlr_server_decoration.h>
 
 // TODO: maybe move this into scene.c
@@ -55,33 +56,36 @@ static void client_on_map(WhaleSurface* surface)
     if (client->driver->map)
         client->driver->map(client);
 
-    client->requested_map = true;
+    client->mappable = true;
 
     if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace)
         wh_workspace_arrange(client->workspace);
 
     wh_client_map(client);
-
     wh_client_raise_to_top(client);
 
+    wh_pointer_focus_update();
     if (g_config_focus_newly_mapped_client)
         wh_keyboard_focus_surface(client->surface);
-
-    wh_pointer_update_focus(false);
 }
 
 static void client_on_unmap(WhaleSurface* surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
 
-    client->requested_map = false;
+    bool refocus = false;
+    if (client->mappable)
+        refocus = wh_pointer_focus_lost_surface(client->surface);
+
+    client->mappable = false;
 
     if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace)
         wh_workspace_arrange(client->workspace);
 
     wh_client_unmap(client);
 
-    wh_pointer_update_focus(true);
+    if (refocus)
+        wh_pointer_focus_update();
 }
 
 static void client_on_commit(WhaleSurface* surface)
@@ -173,12 +177,20 @@ void wh_client_destroy(WhaleClient* client)
 
 void wh_client_map(WhaleClient* client)
 {
+    if (!client->mappable)
+        return;
+
     wlr_scene_node_set_enabled(&client->scene_tree->node, true);
 }
 
 void wh_client_unmap(WhaleClient* client)
 {
     wlr_scene_node_set_enabled(&client->scene_tree->node, false);
+}
+
+bool wh_client_is_mapped(WhaleClient* client)
+{
+    return client->scene_tree->node.enabled;
 }
 
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
@@ -240,8 +252,7 @@ void wh_client_drop_interactive(WhaleClient* client)
 
     wh_scene_tree_set_layer(client->scene_tree, client->layer);
 
-    if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace &&
-        client->requested_map)
+    if (WH_LAYER_NEEDS_REARRANGE(client->layer) && client->workspace)
         wh_workspace_arrange(client->workspace);
 }
 
@@ -259,7 +270,7 @@ void wh_client_set_layer(WhaleLayer layer, WhaleClient* client)
 
     if ((WH_LAYER_NEEDS_REARRANGE(client->prev_layer) ||
          WH_LAYER_NEEDS_REARRANGE(client->layer)) &&
-        client->workspace && client->requested_map)
+        client->workspace && client->mappable)
         wh_workspace_arrange(client->workspace);
 }
 

@@ -404,7 +404,9 @@ static void on_xdg_toplevel_request_move(struct wl_listener* l, void* data)
     {
         if (ev->seat->seat->pointer_state.buttons[i].button == BTN_LEFT)
         {
-            wh_pointer_start_interactive_move(xdg_client->client->surface);
+            wh_pointer_start_interactive_move(
+                BTN_LEFT, xdg_client->client->surface
+            );
             return;
         }
     }
@@ -420,7 +422,7 @@ static void on_xdg_toplevel_request_resize(struct wl_listener* l, void* data)
         if (ev->seat->seat->pointer_state.buttons[i].button == BTN_LEFT)
         {
             wh_pointer_start_interactive_resize(
-                ev->edges, xdg_client->client->surface
+                BTN_LEFT, ev->edges, xdg_client->client->surface
             );
             return;
         }

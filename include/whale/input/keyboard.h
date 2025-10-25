@@ -21,7 +21,7 @@ void wh_keyboard_destroy();
 int wh_keyboard_attach_device(struct wlr_keyboard* keyboard);
 
 void wh_keyboard_focus_surface(WhaleSurface* surface);
-void wh_keyboard_unfocus_unchecked();
+void wh_keyboard_unfocus();
 
 WhaleSurface* wh_keyboard_get_focused_surface();
 

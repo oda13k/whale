@@ -41,7 +41,7 @@ typedef struct whale_client
 
     bool interactive;
 
-    bool requested_map;
+    bool mappable;
 
     const WhaleClientDriver* driver;
     void* driver_ctx;
@@ -59,6 +59,7 @@ void wh_client_detach_surface(WhaleClient* client);
 
 void wh_client_map(WhaleClient* client);
 void wh_client_unmap(WhaleClient* client);
+bool wh_client_is_mapped(WhaleClient* client);
 
 void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client);
 void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client);

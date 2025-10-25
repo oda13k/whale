@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <whale/client/client.h>
 #include <whale/debug.h>
+#include <whale/input/pointer.h>
 #include <whale/log.h>
 #include <whale/output/output.h>
 #include <whale/output/workspace.h>
@@ -59,14 +60,8 @@ int wh_workspace_bind_client(WhaleClient* client, WhaleWorkspace* ws)
     if (client->layer == WH_LAYER_UNDEFINED)
         wh_client_set_layer(ws->default_layer, client);
 
-    if (client->requested_map)
-    {
-        if (WH_LAYER_NEEDS_REARRANGE(client->layer))
-            wh_workspace_arrange(ws);
-
-        if (ws->parent_output->active_workspace == ws)
-            wh_client_map(client);
-    }
+    if (wh_client_is_mapped(client) && WH_LAYER_NEEDS_REARRANGE(client->layer))
+        wh_workspace_arrange(ws);
 
     return 0;
 }
@@ -83,14 +78,8 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
     VEC_REMOVE(client, &ws->clients);
     client->workspace = nullptr;
 
-    if (client->requested_map)
-    {
-        if (WH_LAYER_NEEDS_REARRANGE(client->layer))
-            wh_workspace_arrange(ws);
-
-        if (ws->parent_output->active_workspace == ws)
-            wh_client_unmap(client);
-    }
+    if (wh_client_is_mapped(client) && WH_LAYER_NEEDS_REARRANGE(client->layer))
+        wh_workspace_arrange(ws);
 
     return ws;
 }
@@ -98,14 +87,15 @@ WhaleWorkspace* wh_workspace_unbind_client(WhaleClient* client)
 void wh_workspace_activate(WhaleWorkspace* workspace)
 {
     VEC_FOR_EACH (client, &workspace->clients)
-    {
-        if ((*client)->requested_map)
-            wh_client_map(*client);
-    }
+        wh_client_map(*client);
+
+    wh_pointer_focus_update();
 }
 
 void wh_workspace_deactivate(WhaleWorkspace* workspace)
 {
+    bool refocus = false;
+
     VEC_FOR_EACH (client, &workspace->clients)
     {
         WhaleLayer layer = (*client)->layer;
@@ -113,9 +103,18 @@ void wh_workspace_deactivate(WhaleWorkspace* workspace)
         bool ignore = layer == WH_LAYER_BG || layer == WH_LAYER_NOTIFICATION ||
                       layer == WH_LAYER_POINTER || layer == WH_LAYER_OVERLAY;
 
-        if (!ignore && (*client)->requested_map)
-            wh_client_unmap(*client);
+        if (ignore)
+            continue;
+
+        wh_client_unmap(*client);
+
+        if ((*client)->mappable)
+            refocus =
+                refocus || wh_pointer_focus_lost_surface((*client)->surface);
     }
+
+    if (refocus)
+        wh_pointer_focus_update();
 }
 
 static void client_arrange_tiled(
@@ -198,8 +197,7 @@ workspace_compute_tiling_ctx(WhaleWorkspace* ws, TilingPassContext* ctx)
 
         VEC_FOR_EACH_REVERSE(client, &ws->clients)
         {
-            if ((*client)->layer != WH_LAYER_TILING ||
-                !(*client)->requested_map)
+            if ((*client)->layer != WH_LAYER_TILING || !(*client)->mappable)
                 continue;
 
             WhaleSize2D minsize;
@@ -230,7 +228,7 @@ workspace_compute_tiling_ctx(WhaleWorkspace* ws, TilingPassContext* ctx)
     {
         VEC_FOR_EACH_REVERSE(client, &ws->clients)
         {
-            if ((*client)->layer == WH_LAYER_TILING && (*client)->requested_map)
+            if ((*client)->layer == WH_LAYER_TILING && (*client)->mappable)
                 ++client_count;
         }
 
@@ -259,7 +257,7 @@ void wh_workspace_arrange(WhaleWorkspace* ws)
     size_t tile_idx = 0;
     VEC_FOR_EACH_REVERSE(client, &ws->clients)
     {
-        if (!(*client)->requested_map)
+        if (!(*client)->mappable)
             continue;
 
         WhaleGeometry2D geom;

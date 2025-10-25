@@ -77,7 +77,6 @@ static void switch_workspace(const BindingCallbackArg* arg)
 
     WH_ASSERT(arg->unsigned_64 < 256);
     wh_output_activate_workspace((u8)arg->unsigned_64, output);
-    wh_pointer_update_focus(true);
 }
 
 static void chvt(const BindingCallbackArg* arg)
@@ -106,7 +105,10 @@ static void move_client_to_workspace(const BindingCallbackArg* arg)
     wh_workspace_unbind_client(client);
     wh_workspace_bind_client(client, new_ws);
 
-    wh_pointer_update_focus(true);
+    wh_client_unmap(client);
+
+    wh_pointer_focus_lost_surface(client->surface);
+    wh_pointer_focus_update();
 }
 
 static void exit_whale(const BindingCallbackArg*)
@@ -114,7 +116,7 @@ static void exit_whale(const BindingCallbackArg*)
     wh_compositor_request_exit();
 }
 
-static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
+static void focus_nex_client_on_workspace(const BindingCallbackArg*)
 {
     WhaleSurface* surface = wh_keyboard_get_focused_surface();
     if (!surface)
@@ -125,84 +127,40 @@ static void focus_nex_client_on_workspace(const BindingCallbackArg* arg)
     WH_ASSERT_SANITY(ws);
 
     size_t next_client_idx = 0;
-    s8 direction = arg->signed_8;
-    if (direction == 1)
+
+    VEC_FOR_EACH (client, &ws->clients)
     {
-        VEC_FOR_EACH (client, &ws->clients)
-        {
-            if (*client == focused_client)
-                break;
+        if (*client == focused_client)
+            break;
 
-            ++next_client_idx;
-        }
-
-        if (next_client_idx-- == 0)
-            next_client_idx = VEC_GET_LENGTH(&ws->clients) - 1;
+        ++next_client_idx;
     }
-    else if (direction == -1)
-    {
-        VEC_FOR_EACH (client, &ws->clients)
-        {
-            ++next_client_idx;
 
-            if (*client == focused_client)
-                break;
-        }
-
-        if (next_client_idx >= VEC_GET_LENGTH(&ws->clients))
-            next_client_idx = 0;
-    }
-    else
-        WH_ASSERT_NOT_REACHED();
+    if (next_client_idx-- == 0)
+        next_client_idx = VEC_GET_LENGTH(&ws->clients) - 1;
 
     WhaleClient* client = VEC_AT(next_client_idx, &ws->clients);
     if (client->surface)
+    {
         wh_keyboard_focus_surface(client->surface);
+        wh_client_raise_to_top(client);
+    }
 
     if (g_config_move_cursor_on_focus_change)
     {
         WhaleGeometry2D geom;
         wh_client_get_geometry(&geom, client);
-        geom.pos.x += geom.size.w / 2.f;
-        geom.pos.y += geom.size.h / 2.f;
+        geom.pos.x += geom.size.w / 2.0;
+        geom.pos.y += geom.size.h / 2.0;
         wh_pointer_set_pos(&geom.pos);
     }
 }
 
-static void rotate_client_array(const BindingCallbackArg*)
-{
-    WhaleOutput* output = wh_output_get_focused();
-    WhaleWorkspace* ws = output->active_workspace;
-
-    if (VEC_GET_LENGTH(&ws->clients) <= 1)
-        return;
-
-    WhaleClient* first = nullptr;
-    VEC_FOR_EACH (client, &ws->clients)
-    {
-        if ((*client)->requested_map)
-        {
-            first = *client;
-            break;
-        }
-    }
-
-    if (first)
-    {
-        VEC_REMOVE(first, &ws->clients);
-        VEC_PUSH(first, &ws->clients);
-        wh_workspace_arrange(ws);
-    }
-}
-
-static void make_focused_client_tiled(const BindingCallbackArg*)
+static void toggle_focused_client_fullscreen(const BindingCallbackArg*)
 {
     WhaleSurface* surface = wh_keyboard_get_focused_surface();
     if (!surface)
         return;
-
-    WhaleClient* client = wh_client_from_surface(surface);
-    wh_client_set_layer(WH_LAYER_TILING, client);
 }
 
 static void on_keyboard_bindings_config_changed()

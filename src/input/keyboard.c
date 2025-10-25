@@ -217,8 +217,11 @@ void wh_keyboard_focus_surface(WhaleSurface* surface)
     g_focused_surface = target_surface;
 }
 
-void wh_keyboard_unfocus_unchecked()
+void wh_keyboard_unfocus()
 {
+    if (!g_focused_surface)
+        return;
+
     WhaleClient* client = wh_client_from_surface(g_focused_surface);
     wh_client_set_active(false, client);
 
@@ -237,5 +240,5 @@ bool wh_keyboard_is_modifier_active(u32 mod)
         &g_keyboard_group.wlr_keyboard_group->keyboard
     );
 
-    return WH_KEYBOARD_MODS_DISCARD_CAPS(modifiers) & mod;
+    return WH_KEYBOARD_MODS_DISCARD_CAPS(modifiers) == mod;
 }

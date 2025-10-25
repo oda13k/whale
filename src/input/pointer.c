@@ -20,31 +20,28 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 
 #define POINTER_IS_INTERACTIVE()                                               \
-    (g_pointer.mode != WHALE_POINTER_MODE_PASSTHROUGH)
+    (g_pointer.mode == WH_POINTER_MODE_INTERACTIVE_MOVE ||                     \
+     g_pointer.mode == WH_POINTER_MODE_INTERACTIVE_RESIZE)
 
 typedef enum
 {
-    WHALE_POINTER_MODE_PASSTHROUGH,
-    WHALE_POINTER_MODE_INTERACTIVE_MOVE,
-    WHALE_POINTER_MODE_INTERACTIVE_RESIZE,
+    WH_POINTER_MODE_FLOATING,
+    WH_POINTER_MODE_FOCUSED,
+    WH_POINTER_MODE_INTERACTIVE_MOVE,
+    WH_POINTER_MODE_INTERACTIVE_RESIZE,
+    WH_POINTER_MODE_DRAG
 } WhalePointerMode;
-
-typedef struct
-{
-    struct wlr_pointer_constraint_v1* constraint;
-    struct wl_listener destroy_listener;
-} WhalePointerConstraint;
 
 typedef struct
 {
     WhaleSurface* focused_surface;
     WhalePointerMode mode;
     struct wlr_cursor* wlr_cursor;
+
     struct
     {
-        WhalePosition2D pointer_start_pos;
-        WhalePosition2D client_start_pos;
         u32 resize_edge;
+        u32 button;
     } interactive;
 
     struct wlr_scene_tree* drag_icon_tree;
@@ -63,24 +60,15 @@ static WhalePointer g_pointer;
 
 static bool g_config_focus_follows_pointer = true;
 
-static void pointer_release_all_buttons()
+static void pointer_unfocus()
 {
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    time_t time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    if (!g_pointer.focused_surface)
+        return;
 
-    for (size_t i = 0; i < 8; ++i)
-    {
-        wlr_seat_pointer_notify_button(
-            g_seat, time, i + BTN_MOUSE, WL_POINTER_BUTTON_STATE_RELEASED
-        );
-    }
-}
-
-static void pointer_unfocus_unchecked()
-{
     wh_pointer_drop_interactive();
-    pointer_release_all_buttons();
+    wh_pointer_set_texture("default");
+
+    g_pointer.mode = WH_POINTER_MODE_FLOATING;
 
     wlr_seat_pointer_notify_clear_focus(g_seat);
     g_pointer.focused_surface = nullptr;
@@ -90,8 +78,8 @@ static void pointer_focus_surface(
     const WhalePosition2D* enter_coords, WhaleSurface* surface
 )
 {
-    if (g_pointer.focused_surface && g_pointer.focused_surface != surface)
-        pointer_unfocus_unchecked();
+    if (g_pointer.focused_surface != surface)
+        pointer_unfocus();
 
     wlr_seat_pointer_notify_enter(
         g_seat, surface->wlr_surface, enter_coords->x, enter_coords->y
@@ -100,65 +88,78 @@ static void pointer_focus_surface(
     g_pointer.focused_surface = surface;
 }
 
-static void handle_interactive_pointer_motion(const WhalePosition2D* delta)
+static void handle_interactive_pointer_motion(
+    const WhalePosition2D* delta, struct wlr_input_device* dev
+)
 {
     WhaleClient* client = wh_client_from_surface(g_pointer.focused_surface);
 
-    wlr_cursor_move(g_pointer.wlr_cursor, nullptr, delta->x, delta->y);
+    WhalePosition2D old_pos;
+    wh_pointer_get_pos(&old_pos);
 
-    if (g_pointer.mode == WHALE_POINTER_MODE_INTERACTIVE_RESIZE)
+    wlr_cursor_move(g_pointer.wlr_cursor, dev, delta->x, delta->y);
+
+    WhalePosition2D cursor_pos;
+    wh_pointer_get_pos(&cursor_pos);
+
+    if (g_pointer.mode == WH_POINTER_MODE_INTERACTIVE_RESIZE)
     {
-        WhalePosition2D cursor_pos;
-        wh_pointer_get_pos(&cursor_pos);
+        WhaleGeometry2D geom;
+        wh_client_get_geometry(&geom, client);
 
-        WhaleGeometry2D client_geom;
-        wh_client_get_geometry(&client_geom, client);
+        WhaleSize2D min;
+        wh_client_get_minmax_size(&min, nullptr, client);
 
-        WhaleSize2D min_size;
-        wh_client_get_minmax_size(&min_size, nullptr, client);
+        u32 edge = g_pointer.interactive.resize_edge;
 
-        // bool needs_move =
-        //     g_pointer.interactive.resize_edge != WLR_EDGE_RIGHT &&
-        //     g_pointer.interactive.resize_edge != WLR_EDGE_BOTTOM &&
-        //     g_pointer.interactive.resize_edge != (WLR_EDGE_RIGHT |
-        //     WLR_EDGE_BOTTOM);
+        if (edge & WLR_EDGE_LEFT)
+        {
+            wh_coord_t x = round(cursor_pos.x);
+            wh_coord_t w = geom.size.w + (geom.pos.x - x);
 
-        bool horizontal_edge =
-            g_pointer.interactive.resize_edge == WLR_EDGE_RIGHT ||
-            g_pointer.interactive.resize_edge == WLR_EDGE_LEFT;
+            if (w > min.w)
+            {
+                geom.pos.x = x;
+                geom.size.w = w;
+            }
+        }
+        else if (edge & WLR_EDGE_RIGHT)
+        {
+            wh_coord_t w = round(cursor_pos.x) - geom.pos.x;
+            if (w > min.w)
+                geom.size.w = w;
+        }
 
-        bool vertical_edge =
-            g_pointer.interactive.resize_edge == WLR_EDGE_TOP ||
-            g_pointer.interactive.resize_edge == WLR_EDGE_BOTTOM;
+        if (edge & WLR_EDGE_TOP)
+        {
+            wh_coord_t y = round(cursor_pos.y);
+            wh_coord_t h = geom.size.h + (geom.pos.y - y);
 
-        wh_coord_t dx = cursor_pos.x - client_geom.pos.x;
-        wh_coord_t dy = cursor_pos.y - client_geom.pos.y;
+            if (h > min.h)
+            {
+                geom.pos.y = y;
+                geom.size.h = h;
+            }
+        }
+        else if (edge & WLR_EDGE_BOTTOM)
+        {
+            wh_coord_t h = round(cursor_pos.y) - geom.pos.y;
+            if (h > min.h)
+                geom.size.h = h;
+        }
 
-        WhaleSize2D new_size = {
-            .w = vertical_edge ? client_geom.size.w
-                               : MAX2(dx < 0 ? 0 : (u32)dx, min_size.w),
-            .h = horizontal_edge ? client_geom.size.h
-                                 : MAX2(dy < 0 ? 0 : (u32)dy, min_size.h)
-        };
-
-        wh_client_set_size(&new_size, client);
+        wh_client_set_pos(&geom.pos, client);
+        wh_client_set_size(&geom.size, client);
     }
-    else if (g_pointer.mode == WHALE_POINTER_MODE_INTERACTIVE_MOVE)
+    else if (g_pointer.mode == WH_POINTER_MODE_INTERACTIVE_MOVE)
     {
-        WhalePosition2D cursor_pos;
-        wh_pointer_get_pos(&cursor_pos);
+        WhaleGeometry2D geom;
+        wh_client_get_geometry(&geom, client);
 
-        wh_coord_t dx =
-            cursor_pos.x - g_pointer.interactive.pointer_start_pos.x;
-        wh_coord_t dy =
-            cursor_pos.y - g_pointer.interactive.pointer_start_pos.y;
+        geom.pos.x -= (round(old_pos.x) - round(cursor_pos.x));
+        geom.pos.y -= (round(old_pos.y) - round(cursor_pos.y));
 
-        WhalePosition2D pos = {
-            .x = g_pointer.interactive.client_start_pos.x + dx,
-            .y = g_pointer.interactive.client_start_pos.y + dy
-        };
-
-        wh_client_set_pos(&pos, client);
+        wh_client_set_pos(&geom.pos, client);
         wh_client_configure(client);
 
         WhaleOutput* output = wh_output_get_at(&cursor_pos);
@@ -167,6 +168,10 @@ static void handle_interactive_pointer_motion(const WhalePosition2D* delta)
         {
             wh_workspace_unbind_client(client);
             wh_workspace_bind_client(client, output->active_workspace);
+
+            geom.pos.x = cursor_pos.x - client->size.w / 2.0;
+            geom.pos.y = cursor_pos.y - client->size.h / 2.0;
+            wh_client_set_pos(&geom.pos, client);
         }
     }
     else
@@ -179,13 +184,8 @@ static void handle_interactive_pointer_button(
     u32 button, enum wl_pointer_button_state state
 )
 {
-    /* I guess the client *could* request a resize/move in some other way
-    that is not a left-button click in which case this is bad UX... oh well.
-    */
-    bool released_left_button =
-        button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_RELEASED;
-
-    if (released_left_button)
+    if (button == g_pointer.interactive.button &&
+        state == WL_POINTER_BUTTON_STATE_RELEASED)
         wh_pointer_drop_interactive();
 }
 
@@ -293,8 +293,7 @@ static void handle_pointer_motion(
         );
     }
 
-    WhaleSurface* surface =
-        wh_pointer_update_focus(g_config_focus_follows_pointer);
+    WhaleSurface* surface = wh_pointer_focus_update();
     if (!surface)
         return;
 
@@ -312,46 +311,59 @@ static void handle_pointer_button(
     u32 button, enum wl_pointer_button_state state, u32 time_ms
 )
 {
-    if (state != WL_POINTER_BUTTON_STATE_PRESSED)
-        goto notify;
-
-    if (wh_keyboard_is_modifier_active(WH_KEYBOARD_MOD_NORMAL) &&
-        g_pointer.focused_surface && button == BTN_LEFT)
-    {
-        if (wh_keyboard_is_modifier_active(WLR_MODIFIER_SHIFT))
-        {
-            WhaleClient* client =
-                wh_client_from_surface(g_pointer.focused_surface);
-
-            WhaleSize2D size = {.w = 1024, .h = 720};
-            wh_client_set_layer(WH_LAYER_FLOATING, client);
-            wh_client_set_size(&size, client);
-        }
-
-        wh_pointer_start_interactive_move(g_pointer.focused_surface);
-        return;
-    }
-
     if (button == BTN_LEFT || button == BTN_RIGHT || button == BTN_MIDDLE)
     {
-        WhalePosition2D cursor_pos;
-        wh_pointer_get_pos(&cursor_pos);
+        WhaleSurface* surface = g_pointer.focused_surface;
 
-        WhaleSurface* surface = wh_scene_get_topmost_surface_at(&cursor_pos);
-
-        if (surface)
+        if (state == WL_POINTER_BUTTON_STATE_RELEASED)
         {
-            WhaleClient* client = wh_client_from_surface(surface);
-            if (client->layer == WH_LAYER_FLOATING)
-                wh_client_raise_to_top(client);
+            g_pointer.mode = WH_POINTER_MODE_FLOATING;
+            goto notify;
+        }
 
-            if (!g_config_focus_follows_pointer)
-                wh_keyboard_focus_surface(surface);
-        }
-        else if (wh_keyboard_get_focused_surface())
+        if (!surface)
         {
-            wh_keyboard_unfocus_unchecked();
+            wh_keyboard_unfocus();
+            return;
         }
+
+        if (surface != wh_keyboard_get_focused_surface())
+        {
+            wh_client_raise_to_top(wh_client_from_surface(surface));
+            wh_keyboard_focus_surface(surface);
+        }
+
+        if (wh_keyboard_is_modifier_active(WH_KEYBOARD_MOD_NORMAL))
+        {
+            if (button == BTN_LEFT)
+            {
+                wh_pointer_start_interactive_move(
+                    BTN_LEFT, g_pointer.focused_surface
+                );
+                return;
+            }
+
+            if (button == BTN_RIGHT)
+            {
+                WhaleClient* client = wh_client_from_surface(surface);
+                WhaleGeometry2D geom;
+                wh_client_get_geometry(&geom, client);
+
+                geom.pos.x += geom.size.w - 1;
+                geom.pos.y += geom.size.h - 1;
+
+                wh_pointer_set_pos(&geom.pos);
+
+                wh_pointer_start_interactive_resize(
+                    BTN_RIGHT,
+                    WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT,
+                    g_pointer.focused_surface
+                );
+                return;
+            }
+        }
+
+        g_pointer.mode = WH_POINTER_MODE_FOCUSED;
     }
 
 notify:
@@ -372,7 +384,7 @@ WH_CALLBACK(pointer_motion_absolute, struct wl_listener*, void* data)
     };
 
     if (UNLIKELY(POINTER_IS_INTERACTIVE()))
-        handle_interactive_pointer_motion(&delta);
+        handle_interactive_pointer_motion(&delta, &ev->pointer->base);
     else
         handle_pointer_motion(
             &delta, &delta, &ev->pointer->base, ev->time_msec
@@ -387,7 +399,7 @@ WH_CALLBACK(pointer_motion, struct wl_listener*, void* data)
     WhalePosition2D delta_unaccel = {.x = ev->unaccel_dx, .y = ev->unaccel_dy};
 
     if (UNLIKELY(POINTER_IS_INTERACTIVE()))
-        handle_interactive_pointer_motion(&delta);
+        handle_interactive_pointer_motion(&delta, &ev->pointer->base);
     else
         handle_pointer_motion(
             &delta, &delta_unaccel, &ev->pointer->base, ev->time_msec
@@ -452,12 +464,17 @@ WH_CALLBACK(seat_request_start_drag, struct wl_listener*, void* data)
 
 WH_CALLBACK(seat_destroy_drag, struct wl_listener*, void*)
 {
-    wh_pointer_update_focus(false);
+    WH_UNLISTEN(seat_destroy_drag);
 
     wlr_scene_node_destroy(&g_pointer.drag_icon_tree->node);
     g_pointer.drag_icon_tree = nullptr;
 
-    WH_UNLISTEN(seat_destroy_drag);
+    g_pointer.mode = WH_POINTER_MODE_FLOATING;
+
+    /* Firefox becomes unresponsive if we don't refocus. */
+    pointer_unfocus();
+    wh_keyboard_unfocus();
+    wh_pointer_focus_update();
 }
 
 WH_CALLBACK(seat_start_drag, struct wl_listener*, void* data)
@@ -469,7 +486,8 @@ WH_CALLBACK(seat_start_drag, struct wl_listener*, void* data)
     if (g_pointer.drag_icon_tree)
         wh_log(WARN, "Started a drag, but the previous one hasn't been freed.");
 
-    wh_pointer_update_focus(false);
+    g_pointer.mode = WH_POINTER_MODE_DRAG;
+    wh_pointer_focus_update();
 
     g_pointer.drag_icon_tree = wh_scene_attach_drag_icon(drag->icon);
 
@@ -495,7 +513,7 @@ int wh_pointer_init(struct wlr_seat* seat)
 
     wh_output_layout_attach_pointer(g_pointer.wlr_cursor);
 
-    g_xcursor_manager = wlr_xcursor_manager_create(NULL, 24);
+    g_xcursor_manager = wlr_xcursor_manager_create("Adwaita", 24);
     if (!g_xcursor_manager)
     {
         wh_log(ERR, "pointer: Failed to create xcursor manager.");
@@ -568,32 +586,20 @@ int wh_pointer_attach_device(struct wlr_pointer* pointer)
     return 0;
 }
 
-WhaleSurface* wh_pointer_update_focus(bool allow_keyboard)
+WhaleSurface* wh_pointer_focus_update()
 {
+    if (g_pointer.mode == WH_POINTER_MODE_FOCUSED || POINTER_IS_INTERACTIVE())
+        return g_pointer.focused_surface;
+
     WhalePosition2D pointer_pos;
     wh_pointer_get_pos(&pointer_pos);
-
-    bool focus_keyboard = g_config_focus_follows_pointer && allow_keyboard;
 
     WhaleSurface* surface = wh_scene_get_topmost_surface_at(&pointer_pos);
     if (!surface)
     {
-        if (g_pointer.focused_surface)
-        {
-            pointer_unfocus_unchecked();
-            wh_pointer_set_texture("default");
-        }
-
-        if (focus_keyboard && wh_keyboard_get_focused_surface())
-            wh_keyboard_unfocus_unchecked();
-
+        pointer_unfocus();
         return nullptr;
     }
-
-    // FIXME: put this check back in after we add transations.
-    // if (surface != g_pointer.focused_surface)
-    // {
-    // }
 
     WhalePosition2D surface_coords = {
         .x = pointer_pos.x - surface->layout_pos.x,
@@ -602,45 +608,77 @@ WhaleSurface* wh_pointer_update_focus(bool allow_keyboard)
 
     pointer_focus_surface(&surface_coords, surface);
 
-    if (focus_keyboard)
+    if (g_config_focus_follows_pointer || !wh_keyboard_get_focused_surface())
         wh_keyboard_focus_surface(surface);
 
-    return surface;
+    return g_pointer.focused_surface;
 }
 
-void wh_pointer_start_interactive_move(WhaleSurface* surface)
+bool wh_pointer_focus_lost_surface(WhaleSurface* surface)
 {
-    /* Only the keyboard focused (active) surface can request a
-    pointer mode. */
+    bool unfocused = false;
+
+    WhaleSurface* s = wh_keyboard_get_focused_surface();
+    if (surface == s || VEC_INCLUDES(s, &surface->children))
+    {
+        wh_keyboard_unfocus();
+        unfocused = true;
+    }
+
+    s = g_pointer.focused_surface;
+    if (surface == s || VEC_INCLUDES(s, &surface->children))
+    {
+        pointer_unfocus();
+        unfocused = true;
+    }
+
+    return unfocused;
+}
+
+void wh_pointer_start_interactive_move(u32 button, WhaleSurface* surface)
+{
     if (surface != wh_keyboard_get_focused_surface() ||
         surface != g_pointer.focused_surface || POINTER_IS_INTERACTIVE())
         return;
-
-    g_pointer.mode = WHALE_POINTER_MODE_INTERACTIVE_MOVE;
-    wh_pointer_set_texture("fleur");
-    wh_pointer_get_pos(&g_pointer.interactive.pointer_start_pos);
 
     WhaleClient* client = wh_client_from_surface(surface);
-
     wh_client_start_interactive(client);
 
-    WhaleGeometry2D client_geom;
-    wh_client_get_geometry(&client_geom, client);
-    g_pointer.interactive.client_start_pos = client_geom.pos;
+    g_pointer.mode = WH_POINTER_MODE_INTERACTIVE_MOVE;
+    wh_pointer_set_texture("grabbing");
+    g_pointer.interactive.button = button;
 }
 
-void wh_pointer_start_interactive_resize(u32 edge, WhaleSurface* surface)
+void wh_pointer_start_interactive_resize(
+    u32 button, u32 edge, WhaleSurface* surface
+)
 {
     if (surface != wh_keyboard_get_focused_surface() ||
         surface != g_pointer.focused_surface || POINTER_IS_INTERACTIVE())
         return;
 
-    g_pointer.mode = WHALE_POINTER_MODE_INTERACTIVE_RESIZE;
-    wh_pointer_get_pos(&g_pointer.interactive.pointer_start_pos);
+    if (((edge & WLR_EDGE_LEFT) && (edge & WLR_EDGE_RIGHT)) ||
+        ((edge & WLR_EDGE_TOP) && (edge & WLR_EDGE_BOTTOM)) ||
+        edge == WLR_EDGE_NONE)
+    {
+        wh_log(ERR, "pointer: Bad resize edge request.");
+        return;
+    }
 
-    WhaleGeometry2D client_geom;
-    wh_client_get_geometry(&client_geom, wh_client_from_surface(surface));
-    g_pointer.interactive.client_start_pos = client_geom.pos;
+    static const char* xcursor_names[] = {
+        [WLR_EDGE_BOTTOM] = "ns-resize",
+        [WLR_EDGE_RIGHT] = "ew-resize",
+        [WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT] = "nwse-resize",
+        [WLR_EDGE_BOTTOM | WLR_EDGE_LEFT] = "nesw-resize",
+        [WLR_EDGE_TOP] = "ns-resize",
+        [WLR_EDGE_LEFT] = "ew-resize",
+        [WLR_EDGE_TOP | WLR_EDGE_LEFT] = "nwse-resize",
+        [WLR_EDGE_TOP | WLR_EDGE_RIGHT] = "nesw-resize",
+    };
+
+    g_pointer.mode = WH_POINTER_MODE_INTERACTIVE_RESIZE;
+    wh_pointer_set_texture(xcursor_names[edge]);
+    g_pointer.interactive.button = button;
     g_pointer.interactive.resize_edge = edge;
 }
 
@@ -649,7 +687,7 @@ void wh_pointer_drop_interactive()
     if (!POINTER_IS_INTERACTIVE())
         return;
 
-    g_pointer.mode = WHALE_POINTER_MODE_PASSTHROUGH;
+    g_pointer.mode = WH_POINTER_MODE_FLOATING;
     wh_pointer_set_texture("default");
 
     WhaleSurface* surface = g_pointer.focused_surface;
@@ -662,8 +700,8 @@ void wh_pointer_drop_interactive()
 
     /* If we don't force a pointer refocus firefox can't be moved again until
      * the surface is refocused by the user. ??? */
-    pointer_unfocus_unchecked();
-    wh_pointer_update_focus(false);
+    pointer_unfocus();
+    wh_pointer_focus_update();
 }
 
 void wh_pointer_set_texture(const char* name)
