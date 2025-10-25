@@ -358,12 +358,14 @@ static void xdg_client_on_commit(WhaleClient* client)
         };
         wh_surface_set_pos(&pos, client->surface);
 
-        WhaleSize2D size = {
-            .w = CAST_S32_TO_U32(xdg_client->toplevel->base->geometry.width),
-            .h = CAST_S32_TO_U32(xdg_client->toplevel->base->geometry.height)
-        };
-        if (client->size.w != size.w || client->size.h != size.h)
+        WhaleSize2D min, max;
+        xdg_client_get_minmax_size(&min, &max, client);
+
+        if ((min.w && min.w == max.w && min.w != client->size.w) ||
+            (min.h && min.h == max.h && min.h != client->size.h))
+        {
             xdg_toplevel_update_wants_floating(xdg_client);
+        }
     }
 }
 
