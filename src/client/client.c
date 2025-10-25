@@ -219,6 +219,12 @@ void wh_client_get_minmax_size(
 )
 {
     client->driver->get_minmax_size(min, max, client);
+
+    if (min)
+    {
+        min->w = MAX2(min->w, 384);
+        min->h = MAX2(min->h, 216);
+    }
 }
 
 void wh_client_start_interactive(WhaleClient* client)
