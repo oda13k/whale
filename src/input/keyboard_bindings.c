@@ -180,12 +180,6 @@ static void on_keyboard_bindings_config_changed()
                                      .arg = {.string = "/bin/alacritty"}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_f,
-                                     .modifiers = WH_KEYBOARD_MOD_NORMAL,
-                                     .callback = spawn,
-                                     .arg = {.string = "/bin/librewolf -p"}};
-    VEC_PUSH(binding, &g_keyboard_bindings);
-
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_j,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
                                      .callback = step_tiling_primary_split,
@@ -212,6 +206,7 @@ static void on_keyboard_bindings_config_changed()
                                .arg = {.signed_8 = 1}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
+    /* Workspace switching */
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_1,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
                                      .callback = switch_workspace,
@@ -236,6 +231,7 @@ static void on_keyboard_bindings_config_changed()
                                      .arg = {.unsigned_64 = 3}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
+    /* VT switching */
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_XF86Switch_VT_1,
                                      .modifiers =
                                          WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,
@@ -264,6 +260,7 @@ static void on_keyboard_bindings_config_changed()
                                      .arg = {.unsigned_64 = 4}};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
+    /* Client workspace switching */
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_exclam,
                                      .modifiers = WH_KEYBOARD_MOD_IMPORTANT,
                                      .callback = move_client_to_workspace,
@@ -293,26 +290,15 @@ static void on_keyboard_bindings_config_changed()
                                      .callback = exit_whale};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_Return,
-                                     .modifiers = WH_KEYBOARD_MOD_NORMAL,
-                                     .callback = focus_nex_client_on_workspace,
-                                     .arg = {.signed_8 = 1}};
-    VEC_PUSH(binding, &g_keyboard_bindings);
-
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_BackSpace,
-                                     .modifiers = WH_KEYBOARD_MOD_NORMAL,
-                                     .callback = focus_nex_client_on_workspace,
-                                     .arg = {.signed_8 = -1}};
-    VEC_PUSH(binding, &g_keyboard_bindings);
-
     binding = (WhaleKeyboardBinding){.key = XKB_KEY_Tab,
                                      .modifiers = WH_KEYBOARD_MOD_NORMAL,
-                                     .callback = rotate_client_array};
+                                     .callback = focus_nex_client_on_workspace};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
-    binding = (WhaleKeyboardBinding){.key = XKB_KEY_space,
-                                     .modifiers = WH_KEYBOARD_MOD_IMPORTANT,
-                                     .callback = make_focused_client_tiled};
+    binding =
+        (WhaleKeyboardBinding){.key = XKB_KEY_Return,
+                               .modifiers = WH_KEYBOARD_MOD_NORMAL,
+                               .callback = toggle_focused_client_fullscreen};
     VEC_PUSH(binding, &g_keyboard_bindings);
 
     binding = (WhaleKeyboardBinding){
