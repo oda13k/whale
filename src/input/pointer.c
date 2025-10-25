@@ -288,8 +288,8 @@ static void handle_pointer_motion(
     {
         wlr_scene_node_set_position(
             &g_pointer.drag_icon_tree->node,
-            CAST_DBL_TO_INT(pointer_pos.x),
-            CAST_DBL_TO_INT(pointer_pos.y)
+            CAST_COORD_TO_INT(pointer_pos.x),
+            CAST_COORD_TO_INT(pointer_pos.y)
         );
     }
 

@@ -189,8 +189,8 @@ void wh_client_set_pos(const WhalePosition2D* pos, WhaleClient* client)
 
     wlr_scene_node_set_position(
         &client->scene_tree->node,
-        CAST_DBL_TO_INT(pos->x),
-        CAST_DBL_TO_INT(pos->y)
+        CAST_COORD_TO_INT(pos->x),
+        CAST_COORD_TO_INT(pos->y)
     );
 
     if (client->surface)

@@ -38,15 +38,14 @@
     __VA_ARGS__                                                                \
     WH_PRAGMA(GCC diagnostic pop)
 
-#define CAST_DBL_TO_INT(_dbl)                                                  \
+#define CAST_COORD_TO_INT(_dbl)                                                \
     ({                                                                         \
         _Static_assert(                                                        \
             _Generic((_dbl), double: 1, default: 0),                           \
-            "Non double passed to CAST_DBL_TO_INT"                             \
+            "Non double passed to CAST_COORD_TO_INT"                           \
         );                                                                     \
-        int _ret = (int)(_dbl);                                                \
         WH_ASSERT((_dbl) <= INT_MAX && (_dbl) >= INT_MIN);                     \
-        _ret;                                                                  \
+        (int)(_dbl);                                                           \
     })
 
 #define CAST_U32_TO_S32(_u32)                                                  \

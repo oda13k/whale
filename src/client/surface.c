@@ -239,8 +239,8 @@ void wh_surface_set_pos(const WhalePosition2D* pos, WhaleSurface* surface)
 
     wlr_scene_node_set_position(
         &surface->scene_tree->node,
-        CAST_DBL_TO_INT(pos->x),
-        CAST_DBL_TO_INT(pos->y)
+        CAST_COORD_TO_INT(pos->x),
+        CAST_COORD_TO_INT(pos->y)
     );
 
     wh_surface_invalidate_position(surface);
