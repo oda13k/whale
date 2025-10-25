@@ -122,12 +122,16 @@ static void handle_interactive_pointer_motion(
                 geom.pos.x = x;
                 geom.size.w = w;
             }
+            else
+            {
+                geom.pos.x += (geom.size.w - min.w);
+                geom.size.w = min.w;
+            }
         }
         else if (edge & WLR_EDGE_RIGHT)
         {
             wh_coord_t w = round(cursor_pos.x) - geom.pos.x;
-            if (w > min.w)
-                geom.size.w = w;
+            geom.size.w = MAX2(w, min.w);
         }
 
         if (edge & WLR_EDGE_TOP)
@@ -140,12 +144,16 @@ static void handle_interactive_pointer_motion(
                 geom.pos.y = y;
                 geom.size.h = h;
             }
+            else
+            {
+                geom.pos.y += (geom.size.h - min.h);
+                geom.size.h = min.h;
+            }
         }
         else if (edge & WLR_EDGE_BOTTOM)
         {
             wh_coord_t h = round(cursor_pos.y) - geom.pos.y;
-            if (h > min.h)
-                geom.size.h = h;
+            geom.size.h = MAX2(h, min.h);
         }
 
         wh_client_set_pos(&geom.pos, client);
