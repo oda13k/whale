@@ -3,6 +3,8 @@
 #include <whale/client/surface.h>
 #include <whale/compositor.h>
 #include <whale/debug.h>
+#include <whale/input/keyboard.h>
+#include <whale/input/pointer.h>
 #include <whale/log.h>
 #include <whale/output/scene.h>
 #include <wlr/types/wlr_scene.h>
@@ -25,6 +27,8 @@ typedef struct
         struct wl_listener destroy;
     } listeners;
 } WhaleSubsurface;
+
+static bool g_config_focus_newly_mapped_surface = true;
 
 static void on_subsurface_surface_commit(WhaleSurface* surface)
 {
@@ -109,6 +113,10 @@ static void on_surface_map(struct wl_listener* listener, void*)
 
     if (surface->map)
         surface->map(surface);
+
+    wh_pointer_focus_update();
+    if (g_config_focus_newly_mapped_surface)
+        wh_keyboard_focus_surface(surface);
 }
 
 static void on_surface_unmap(struct wl_listener* listener, void*)
@@ -118,6 +126,9 @@ static void on_surface_unmap(struct wl_listener* listener, void*)
 
     if (surface->unmap)
         surface->unmap(surface);
+
+    if (wh_pointer_focus_lost_surface(surface))
+        wh_pointer_focus_update();
 }
 
 void wh_surface_destroy(WhaleSurface* surface)

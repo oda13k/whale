@@ -18,8 +18,6 @@
 // TODO: maybe move this into scene.c
 static VEC(WhaleClient*) g_clients;
 
-static bool g_config_focus_newly_mapped_client = true;
-
 int wh_client_ss_init()
 {
     VEC_INIT(&g_clients);
@@ -63,19 +61,11 @@ static void client_on_map(WhaleSurface* surface)
 
     wh_client_map(client);
     wh_client_raise_to_top(client);
-
-    wh_pointer_focus_update();
-    if (g_config_focus_newly_mapped_client)
-        wh_keyboard_focus_surface(client->surface);
 }
 
 static void client_on_unmap(WhaleSurface* surface)
 {
     WhaleClient* client = wh_client_from_surface(surface);
-
-    bool refocus = false;
-    if (client->mappable)
-        refocus = wh_pointer_focus_lost_surface(client->surface);
 
     client->mappable = false;
 
@@ -83,9 +73,6 @@ static void client_on_unmap(WhaleSurface* surface)
         wh_workspace_arrange(client->workspace);
 
     wh_client_unmap(client);
-
-    if (refocus)
-        wh_pointer_focus_update();
 }
 
 static void client_on_commit(WhaleSurface* surface)
