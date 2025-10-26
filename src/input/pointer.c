@@ -99,8 +99,8 @@ static void handle_interactive_pointer_motion(
 
     wlr_cursor_move(g_pointer.wlr_cursor, dev, delta->x, delta->y);
 
-    WhalePosition2D cursor_pos;
-    wh_pointer_get_pos(&cursor_pos);
+    WhalePosition2D pointer_pos;
+    wh_pointer_get_pos(&pointer_pos);
 
     if (g_pointer.mode == WH_POINTER_MODE_INTERACTIVE_RESIZE)
     {
@@ -114,7 +114,7 @@ static void handle_interactive_pointer_motion(
 
         if (edge & WLR_EDGE_LEFT)
         {
-            wh_coord_t x = round(cursor_pos.x);
+            wh_coord_t x = round(pointer_pos.x);
             wh_coord_t w = geom.size.w + (geom.pos.x - x);
 
             if (w > min.w)
@@ -130,13 +130,13 @@ static void handle_interactive_pointer_motion(
         }
         else if (edge & WLR_EDGE_RIGHT)
         {
-            wh_coord_t w = round(cursor_pos.x) - geom.pos.x;
+            wh_coord_t w = round(pointer_pos.x) - geom.pos.x;
             geom.size.w = MAX2(w, min.w);
         }
 
         if (edge & WLR_EDGE_TOP)
         {
-            wh_coord_t y = round(cursor_pos.y);
+            wh_coord_t y = round(pointer_pos.y);
             wh_coord_t h = geom.size.h + (geom.pos.y - y);
 
             if (h > min.h)
@@ -152,7 +152,7 @@ static void handle_interactive_pointer_motion(
         }
         else if (edge & WLR_EDGE_BOTTOM)
         {
-            wh_coord_t h = round(cursor_pos.y) - geom.pos.y;
+            wh_coord_t h = round(pointer_pos.y) - geom.pos.y;
             geom.size.h = MAX2(h, min.h);
         }
 
@@ -164,21 +164,29 @@ static void handle_interactive_pointer_motion(
         WhaleGeometry2D geom;
         wh_client_get_geometry(&geom, client);
 
-        geom.pos.x -= (round(old_pos.x) - round(cursor_pos.x));
-        geom.pos.y -= (round(old_pos.y) - round(cursor_pos.y));
+        geom.pos.x -= (round(old_pos.x) - round(pointer_pos.x));
+        geom.pos.y -= (round(old_pos.y) - round(pointer_pos.y));
 
         wh_client_set_pos(&geom.pos, client);
         wh_client_configure(client);
 
-        WhaleOutput* output = wh_output_get_at(&cursor_pos);
+        WhaleOutput* output = wh_output_get_at(&pointer_pos);
         if (output && client->workspace &&
             output != client->workspace->parent_output)
         {
+            WhaleGeometry2D old_geom = geom;
+
             wh_workspace_unbind_client(client);
             wh_workspace_bind_client(client, output->active_workspace);
 
-            geom.pos.x = cursor_pos.x - client->size.w / 2.0;
-            geom.pos.y = cursor_pos.y - client->size.h / 2.0;
+            wh_client_get_geometry(&geom, client);
+
+            if (pointer_pos.x > (geom.pos.x + geom.size.w))
+                geom.pos.x += old_geom.size.w - geom.size.w;
+
+            if (pointer_pos.y > (geom.pos.y + geom.size.h))
+                geom.pos.y += old_geom.size.h - geom.size.h;
+
             wh_client_set_pos(&geom.pos, client);
         }
     }
