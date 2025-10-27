@@ -182,6 +182,12 @@ static void xclient_set_active(bool active, WhaleClient* client)
     wlr_xwayland_surface_activate(xclient->xsurface, active);
 }
 
+static void xclient_set_fullscreen(bool fullscreen, WhaleClient* client)
+{
+    XWaylandClient* xclient = client->driver_ctx;
+    wlr_xwayland_surface_set_fullscreen(xclient->xsurface, fullscreen);
+}
+
 static void xclient_set_tiled(bool tiled, WhaleClient* client)
 {
     XWaylandClient* xclient = client->driver_ctx;
@@ -316,16 +322,7 @@ on_xwayland_surface_request_fullscreen(struct wl_listener* listener, void*)
     XWaylandClient* xclient =
         XCLIENT_FROM_LISTENER(listener, request_fullscreen);
 
-    WhaleClient* client = xclient->client;
-
-    bool fullscreen = xclient->xsurface->fullscreen;
-
-    if (fullscreen)
-        wh_client_set_layer(WH_LAYER_FULLSCREEN, client);
-    else if (client->layer == WH_LAYER_FULLSCREEN)
-        wh_client_restore_prev_layer(client);
-
-    wlr_xwayland_surface_set_fullscreen(xclient->xsurface, fullscreen);
+    wh_client_set_fullscreen(xclient->xsurface->fullscreen, xclient->client);
 }
 
 static void
@@ -423,6 +420,7 @@ WH_CALLBACK(xwayland_new_surface, struct wl_listener*, void* data)
 {
     static const WhaleClientDriver xclient_driver = {
         .set_active = xclient_set_active,
+        .set_fullscreen = xclient_set_fullscreen,
         .set_tiled = xclient_set_tiled,
         .set_size = xwayland_surface_set_size,
         .get_minmax_size = xwayland_surface_get_minmax_size,

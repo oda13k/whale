@@ -278,6 +278,17 @@ static void xdg_client_set_tiled(bool tiled, WhaleClient* client)
     wlr_xdg_toplevel_set_tiled(xdg_client->toplevel, edges);
 }
 
+static void xdg_client_set_fullscreen(bool fullscreen, WhaleClient* client)
+{
+    XDG_Client* xdg_client = client->driver_ctx;
+
+    /* Cool and funny note: If we don't actually honor this request
+    (we can't just send a simple configure notify) firefox shits it's
+    pants and it's UI stops working after requesting a fullscreen :^) */
+    if (xdg_client->toplevel->base->initialized)
+        wlr_xdg_toplevel_set_fullscreen(xdg_client->toplevel, fullscreen);
+}
+
 static void xdg_toplevel_update_wants_floating(XDG_Client* xdg_client)
 {
     WhaleClient* client = xdg_client->client;
@@ -432,19 +443,10 @@ static void on_xdg_toplevel_request_resize(struct wl_listener* l, void* data)
 static void on_xdg_toplevel_request_fullscreen(struct wl_listener* l, void*)
 {
     XDG_Client* xdg_client = XDG_CLIENT_FROM_LISTENER(l, request_fullscreen);
-    WhaleClient* client = xdg_client->client;
-    bool fullscreen = xdg_client->toplevel->requested.fullscreen;
 
-    if (fullscreen)
-        wh_client_set_layer(WH_LAYER_FULLSCREEN, client);
-    else if (client->layer == WH_LAYER_FULLSCREEN)
-        wh_client_restore_prev_layer(client);
-
-    /* Cool and funny note: If we don't actually honor this request
-    (we can't just send a simple configure notify) firefox shits it's
-    pants and it's UI stops working after requesting a fullscreen :^) */
-    if (xdg_client->toplevel->base->initialized)
-        wlr_xdg_toplevel_set_fullscreen(xdg_client->toplevel, fullscreen);
+    wh_client_set_fullscreen(
+        xdg_client->toplevel->requested.fullscreen, xdg_client->client
+    );
 }
 
 static void on_xdg_toplevel_request_maximize(struct wl_listener* l, void*)
@@ -467,6 +469,7 @@ static void on_xdg_toplevel_new(struct wl_listener*, void* data)
 {
     static const WhaleClientDriver xdg_client_driver = {
         .set_active = xdg_client_set_active,
+        .set_fullscreen = xdg_client_set_fullscreen,
         .set_tiled = xdg_client_set_tiled,
         .set_size = xdg_client_set_size,
         .get_minmax_size = xdg_client_get_minmax_size,

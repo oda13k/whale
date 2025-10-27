@@ -102,6 +102,7 @@ WhaleClient* wh_client_new(const WhaleClientDriver* driver, void* driver_ctx)
     }
 
     WH_ASSERT_SANITY(driver->set_tiled);
+    WH_ASSERT_SANITY(driver->set_fullscreen);
     WH_ASSERT_SANITY(driver->set_active);
     WH_ASSERT_SANITY(driver->set_size);
     WH_ASSERT_SANITY(driver->get_minmax_size);
@@ -224,6 +225,16 @@ void wh_client_get_minmax_size(
         min->w = MAX2(min->w, 384);
         min->h = MAX2(min->h, 216);
     }
+}
+
+void wh_client_set_fullscreen(bool fullscreen, WhaleClient* client)
+{
+    if (fullscreen)
+        wh_client_set_layer(WH_LAYER_FULLSCREEN, client);
+    else if (client->layer == WH_LAYER_FULLSCREEN)
+        wh_client_restore_prev_layer(client);
+
+    client->driver->set_fullscreen(fullscreen, client);
 }
 
 void wh_client_start_interactive(WhaleClient* client)

@@ -14,6 +14,7 @@ typedef struct
 {
     void (*set_active)(bool active, struct whale_client* client);
     void (*set_tiled)(bool tiled, struct whale_client* client);
+    void (*set_fullscreen)(bool fulscreen, struct whale_client* client);
     void (*close)(struct whale_client* client);
 
     void (*set_size)(const WhaleSize2D* size, struct whale_client* client);
@@ -68,6 +69,7 @@ void wh_client_configure(WhaleClient* client);
 void wh_client_get_minmax_size(
     WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
 );
+void wh_client_set_fullscreen(bool fullscreen, WhaleClient* client);
 
 void wh_client_start_interactive(WhaleClient* client);
 void wh_client_drop_interactive(WhaleClient* client);

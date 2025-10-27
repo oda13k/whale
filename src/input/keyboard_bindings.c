@@ -161,6 +161,9 @@ static void toggle_focused_client_fullscreen(const BindingCallbackArg*)
     WhaleSurface* surface = wh_keyboard_get_focused_surface();
     if (!surface)
         return;
+
+    WhaleClient* client = wh_client_from_surface(surface);
+    wh_client_set_fullscreen(client->layer != WH_LAYER_FULLSCREEN, client);
 }
 
 static void on_keyboard_bindings_config_changed()
