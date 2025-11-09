@@ -346,7 +346,8 @@ static void on_xwayland_request_move(struct wl_listener* listener, void*)
 {
     XWaylandClient* xclient = XCLIENT_FROM_LISTENER(listener, request_move);
 
-    wh_pointer_start_interactive_move(BTN_LEFT, xclient->client->surface);
+    if (xclient->client->surface)
+        wh_pointer_start_interactive_move(BTN_LEFT, xclient->client->surface);
 }
 
 static void
@@ -372,13 +373,15 @@ on_xwayland_surface_set_override_redirect(struct wl_listener* listener, void*)
         wh_client_set_pos(&pos, client);
         wh_client_set_size(&size, client);
 
-        if (!xclient_override_redirect_wants_keyboard_focus(xclient))
+        if (!xclient_override_redirect_wants_keyboard_focus(xclient) &&
+            client->surface)
             client->surface->ignore_keyboard_focus = true;
     }
     else
     {
         wh_client_restore_prev_layer(client);
-        client->surface->ignore_keyboard_focus = false;
+        if (client->surface)
+            client->surface->ignore_keyboard_focus = false;
     }
 }
 
