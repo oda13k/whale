@@ -1,8 +1,8 @@
 whale
 whale.*
+!whale.c
 !include/whale
 build
 .cache
 .vscode
 compile_commands.json
-
