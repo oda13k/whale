@@ -32,7 +32,7 @@ typedef struct toml_value
         struct toml_table* table;
         char* string;
         s64 int64;
-        double float64;
+        f64 float64;
         bool boolean;
     } data;
 } TOML_Value;

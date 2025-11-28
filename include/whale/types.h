@@ -2,6 +2,7 @@
 #ifndef WHALE_TYPES_H
 #define WHALE_TYPES_H
 
+#include <float.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -20,6 +21,18 @@ typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
+
+#if FLT_DIG == 6
+typedef float f32;
+#else
+#error Unknown float size
+#endif
+
+#if DBL_DIG == 15
+typedef double f64;
+#else
+#error Unknown double size
+#endif
 
 #define WH_SIZE_UNDEFINED 0
 typedef u32 wh_dim_t;
