@@ -101,7 +101,8 @@ clipboard_data_src_send(struct wlr_data_source*, const char* mime_type, int fd)
 static void clipboard_data_src_destroy(struct wlr_data_source*) {}
 
 static struct wlr_data_source_impl g_clipboard_data_src_impl = {
-    .send = clipboard_data_src_send, .destroy = clipboard_data_src_destroy
+    .send = clipboard_data_src_send,
+    .destroy = clipboard_data_src_destroy
 };
 
 static void clipboard_slot_destroy(WhaleClipboardSlot* slot)
@@ -124,7 +125,8 @@ static void clipboard_destroy_own_data()
 }
 
 static WhaleClipboardSlot* clipboard_create_slot_for_mime_data(
-    struct wlr_data_source* data_source, char* mime_type
+    struct wlr_data_source* data_source,
+    char* mime_type
 )
 {
     WhaleClipboardSlot slot = {

@@ -139,7 +139,9 @@ xwayland_surface_set_size(const WhaleSize2D* size, WhaleClient* client)
 }
 
 static void xwayland_surface_get_minmax_size(
-    WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
+    WhaleSize2D* min,
+    WhaleSize2D* max,
+    WhaleClient* client
 )
 {
     const XWaylandClient* xclient = client->driver_ctx;

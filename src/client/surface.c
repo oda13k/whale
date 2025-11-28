@@ -159,7 +159,8 @@ void wh_surface_destroy(WhaleSurface* surface)
 }
 
 WhaleSurface* wh_surface_new(
-    struct wlr_surface* wlr_surface, struct wlr_scene_tree* parent_tree
+    struct wlr_surface* wlr_surface,
+    struct wlr_scene_tree* parent_tree
 )
 {
     WhaleSurface* surface = calloc(1, sizeof(WhaleSurface));
@@ -225,7 +226,8 @@ void wh_surface_unmap(WhaleSurface* surface)
 }
 
 WhaleSurface* wh_surface_new_child(
-    struct wlr_surface* wlr_child_surface, WhaleSurface* surface
+    struct wlr_surface* wlr_child_surface,
+    WhaleSurface* surface
 )
 {
     WhaleSurface* child =

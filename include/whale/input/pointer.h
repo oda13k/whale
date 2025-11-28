@@ -17,7 +17,9 @@ bool wh_pointer_focus_lost_surface(WhaleSurface* surface);
 
 void wh_pointer_start_interactive_move(u32 button, WhaleSurface* surface);
 void wh_pointer_start_interactive_resize(
-    u32 button, u32 edge, WhaleSurface* surface
+    u32 button,
+    u32 edge,
+    WhaleSurface* surface
 );
 void wh_pointer_drop_interactive();
 

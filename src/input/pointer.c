@@ -75,7 +75,8 @@ static void pointer_unfocus()
 }
 
 static void pointer_focus_surface(
-    const WhalePosition2D* enter_coords, WhaleSurface* surface
+    const WhalePosition2D* enter_coords,
+    WhaleSurface* surface
 )
 {
     if (g_pointer.focused_surface != surface)
@@ -89,7 +90,8 @@ static void pointer_focus_surface(
 }
 
 static void handle_interactive_pointer_motion(
-    const WhalePosition2D* delta, struct wlr_input_device* dev
+    const WhalePosition2D* delta,
+    struct wlr_input_device* dev
 )
 {
     WhaleClient* client = wh_client_from_surface(g_pointer.focused_surface);
@@ -197,7 +199,8 @@ static void handle_interactive_pointer_motion(
 }
 
 static void handle_interactive_pointer_button(
-    u32 button, enum wl_pointer_button_state state
+    u32 button,
+    enum wl_pointer_button_state state
 )
 {
     if (button == g_pointer.interactive.button &&
@@ -324,7 +327,9 @@ static void handle_pointer_motion(
 }
 
 static void handle_pointer_button(
-    u32 button, enum wl_pointer_button_state state, u32 time_ms
+    u32 button,
+    enum wl_pointer_button_state state,
+    u32 time_ms
 )
 {
     if (button == BTN_LEFT || button == BTN_RIGHT || button == BTN_MIDDLE)
@@ -666,7 +671,9 @@ void wh_pointer_start_interactive_move(u32 button, WhaleSurface* surface)
 }
 
 void wh_pointer_start_interactive_resize(
-    u32 button, u32 edge, WhaleSurface* surface
+    u32 button,
+    u32 edge,
+    WhaleSurface* surface
 )
 {
     if (surface != wh_keyboard_get_focused_surface() ||

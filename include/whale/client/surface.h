@@ -47,7 +47,8 @@ typedef struct whale_surface
 } WhaleSurface;
 
 WhaleSurface* wh_surface_new(
-    struct wlr_surface* wlr_surface, struct wlr_scene_tree* parent_tree
+    struct wlr_surface* wlr_surface,
+    struct wlr_scene_tree* parent_tree
 );
 
 void wh_surface_destroy(WhaleSurface* surface);
@@ -56,7 +57,8 @@ void wh_surface_map(WhaleSurface* surface);
 void wh_surface_unmap(WhaleSurface* surface);
 
 WhaleSurface* wh_surface_new_child(
-    struct wlr_surface* wlr_child_surface, WhaleSurface* surface
+    struct wlr_surface* wlr_child_surface,
+    WhaleSurface* surface
 );
 
 void wh_surface_set_pos(const WhalePosition2D* pos, WhaleSurface* surface);

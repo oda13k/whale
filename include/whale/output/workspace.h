@@ -51,7 +51,8 @@ int wh_workspace_init(struct whale_output* parent_output, WhaleWorkspace* ws);
 void wh_workspace_destroy(WhaleWorkspace* ws);
 
 int wh_workspace_bind_client(
-    struct whale_client* client, WhaleWorkspace* workspace
+    struct whale_client* client,
+    WhaleWorkspace* workspace
 );
 WhaleWorkspace* wh_workspace_unbind_client(struct whale_client* client);
 

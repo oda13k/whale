@@ -237,7 +237,9 @@ static void xdg_client_set_size(const WhaleSize2D* size, WhaleClient* client)
 }
 
 static void xdg_client_get_minmax_size(
-    WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
+    WhaleSize2D* min,
+    WhaleSize2D* max,
+    WhaleClient* client
 )
 {
     XDG_Client* xdg_client = client->driver_ctx;

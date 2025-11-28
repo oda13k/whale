@@ -19,7 +19,9 @@ typedef struct
 
     void (*set_size)(const WhaleSize2D* size, struct whale_client* client);
     void (*get_minmax_size)(
-        WhaleSize2D* min, WhaleSize2D* max, struct whale_client* client
+        WhaleSize2D* min,
+        WhaleSize2D* max,
+        struct whale_client* client
     );
 
     void (*configure)(struct whale_client* client);
@@ -54,7 +56,8 @@ WhaleClient* wh_client_new(const WhaleClientDriver* driver, void* driver_ctx);
 void wh_client_destroy(WhaleClient* client);
 
 int wh_client_attach_surface(
-    struct wlr_surface* wlr_surface, WhaleClient* client
+    struct wlr_surface* wlr_surface,
+    WhaleClient* client
 );
 void wh_client_detach_surface(WhaleClient* client);
 
@@ -67,7 +70,9 @@ void wh_client_set_size(const WhaleSize2D* size, WhaleClient* client);
 void wh_client_set_active(bool active, WhaleClient* client);
 void wh_client_configure(WhaleClient* client);
 void wh_client_get_minmax_size(
-    WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
+    WhaleSize2D* min,
+    WhaleSize2D* max,
+    WhaleClient* client
 );
 void wh_client_set_fullscreen(bool fullscreen, WhaleClient* client);
 

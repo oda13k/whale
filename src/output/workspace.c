@@ -118,7 +118,9 @@ void wh_workspace_deactivate(WhaleWorkspace* workspace)
 }
 
 static void client_arrange_tiled(
-    TilingPassContext* ctx, WhaleClient* client, size_t client_idx
+    TilingPassContext* ctx,
+    WhaleClient* client,
+    size_t client_idx
 )
 {
     const WhaleGeometry2D* bounds = ctx->bounds;

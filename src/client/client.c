@@ -117,7 +117,8 @@ WhaleClient* wh_client_new(const WhaleClientDriver* driver, void* driver_ctx)
 }
 
 int wh_client_attach_surface(
-    struct wlr_surface* wlr_surface, WhaleClient* client
+    struct wlr_surface* wlr_surface,
+    WhaleClient* client
 )
 {
     WH_ASSERT_SANITY(!client->surface);
@@ -215,7 +216,9 @@ void wh_client_configure(WhaleClient* client)
 }
 
 void wh_client_get_minmax_size(
-    WhaleSize2D* min, WhaleSize2D* max, WhaleClient* client
+    WhaleSize2D* min,
+    WhaleSize2D* max,
+    WhaleClient* client
 )
 {
     client->driver->get_minmax_size(min, max, client);
