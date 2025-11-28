@@ -27,7 +27,9 @@ $(EXCLUDE_WARNINGS)
 
 CFLAGS    := -MD -MP -std=c23 $(WARNINGS) \
 -I$(INCLUDE_DIR) -I$(LOCAL_WAYLAND_PROTOCOLS_INCLUDE_DIR) \
--fdiagnostics-color=always -D_POSIX_C_SOURCE=200809L -DWLR_USE_UNSTABLE
+-fdiagnostics-color=always -DWLR_USE_UNSTABLE -D_DEFAULT_SOURCE \
+-DWH_CC_VERSION="\"$(shell ${CC} --version | head -n 1)\"" \
+-DWH_LD_VERSION="\"$(shell ${LD} --version | head -n 1)\""
 
 LDFLAGS   := -lm -lxcb -fuse-ld=$(LD)
 

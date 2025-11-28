@@ -8,6 +8,14 @@
 #include <whale/log.h>
 #include <wlr/util/log.h>
 
+#ifndef WH_CC_VERSION
+#define WH_CC_VERSION "???"
+#endif
+
+#ifndef WH_LD_VERSION
+#define WH_LD_VERSION "???"
+#endif
+
 static const char* g_lvl_translations[] = {
     [FATAL] = "fatal",
     [ERR] = "error",
@@ -27,7 +35,9 @@ static const char* g_lvl_colors[] = {
 static FILE* g_logfile;
 
 static void _wlr_log_callback(
-    enum wlr_log_importance importance, const char* fmt, va_list args
+    enum wlr_log_importance importance,
+    const char* fmt,
+    va_list args
 )
 {
     if (importance <= WLR_ERROR)
@@ -58,6 +68,8 @@ int wh_log_init()
     wlr_log_init(WLR_ERROR, _wlr_log_callback);
 
     wh_log(INFO, "Whale v0.0.0");
+    wh_log(INFO, "Compiled with %s", WH_CC_VERSION);
+    wh_log(INFO, "Linked with %s", WH_LD_VERSION);
 
     return 0;
 }
