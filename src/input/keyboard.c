@@ -204,6 +204,7 @@ void wh_keyboard_focus_surface(WhaleSurface* surface)
             wh_client_set_active(false, old_client);
 
         wh_client_set_active(true, new_client);
+        wh_client_raise_to_top(new_client);
     }
 
     wlr_seat_keyboard_notify_enter(

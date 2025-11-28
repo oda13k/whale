@@ -349,10 +349,7 @@ static void handle_pointer_button(
         }
 
         if (surface != wh_keyboard_get_focused_surface())
-        {
-            wh_client_raise_to_top(wh_client_from_surface(surface));
             wh_keyboard_focus_surface(surface);
-        }
 
         if (wh_keyboard_is_modifier_active(WH_KEYBOARD_MOD_NORMAL))
         {
