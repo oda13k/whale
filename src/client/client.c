@@ -296,6 +296,9 @@ void wh_client_restore_prev_layer(WhaleClient* client)
 void wh_client_raise_to_top(WhaleClient* client)
 {
     wlr_scene_node_raise_to_top(&client->scene_tree->node);
+
+    VEC_FOR_EACH (child, &client->children)
+        wh_client_raise_to_top(*child);
 }
 
 void wh_client_lower_to_bottom(WhaleClient* client)
