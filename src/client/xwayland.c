@@ -37,6 +37,7 @@ typedef struct
         struct wl_listener request_maximize;
         struct wl_listener request_move;
         struct wl_listener set_override_redirect;
+        struct wl_listener set_parent;
         struct wl_listener set_geometry;
         struct wl_listener destroy;
     } listeners;
@@ -387,6 +388,29 @@ on_xwayland_surface_set_override_redirect(struct wl_listener* listener, void*)
     }
 }
 
+static void on_xwayland_surface_set_parent(struct wl_listener* listener, void*)
+{
+    XWaylandClient* xclient = XCLIENT_FROM_LISTENER(listener, set_parent);
+    WhaleClient* client = xclient->client;
+
+    if (xclient->xsurface->parent)
+    {
+        XWaylandClient* xparent = xclient->xsurface->parent->data;
+        WhaleClient* parent = xparent->client;
+
+        client->parent = parent;
+        VEC_PUSH(client, &parent->children);
+    }
+    else if (client->parent)
+    {
+        WhaleClient* parent = client->parent;
+        WH_ASSERT(VEC_INCLUDES(client, &parent->children));
+
+        client->parent = nullptr;
+        VEC_REMOVE(client, &parent->children);
+    }
+}
+
 static void on_xwayland_set_geometry(struct wl_listener* listener, void*)
 {
     XWaylandClient* xclient = XCLIENT_FROM_LISTENER(listener, set_geometry);
@@ -413,6 +437,7 @@ static void on_xwayland_surface_destroy(struct wl_listener* listener, void*)
     UNLISTEN(&xclient->listeners.request_maximize);
     UNLISTEN(&xclient->listeners.request_move);
     UNLISTEN(&xclient->listeners.set_override_redirect);
+    UNLISTEN(&xclient->listeners.set_parent);
     UNLISTEN(&xclient->listeners.set_geometry);
     UNLISTEN(&xclient->listeners.destroy);
 
@@ -507,6 +532,12 @@ WH_CALLBACK(xwayland_new_surface, struct wl_listener*, void* data)
         &xsurface->events.set_override_redirect,
         &xclient->listeners.set_override_redirect,
         on_xwayland_surface_set_override_redirect
+    );
+
+    LISTEN(
+        &xsurface->events.set_parent,
+        &xclient->listeners.set_parent,
+        on_xwayland_surface_set_parent
     );
 
     LISTEN(

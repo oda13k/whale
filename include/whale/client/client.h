@@ -32,6 +32,9 @@ typedef struct
 
 typedef struct whale_client
 {
+    struct whale_client* parent;
+    VEC(struct whale_client*) children;
+
     WhaleSurface* surface;
     struct wlr_scene_tree* scene_tree;
 

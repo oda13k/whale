@@ -101,6 +101,8 @@ WhaleClient* wh_client_new(const WhaleClientDriver* driver, void* driver_ctx)
         return nullptr;
     }
 
+    VEC_INIT(&client->children);
+
     WH_ASSERT_SANITY(driver->set_tiled);
     WH_ASSERT_SANITY(driver->set_fullscreen);
     WH_ASSERT_SANITY(driver->set_active);
@@ -153,6 +155,14 @@ void wh_client_detach_surface(WhaleClient* client)
 void wh_client_destroy(WhaleClient* client)
 {
     VEC_REMOVE(client, &g_clients);
+
+    if (client->parent)
+        VEC_REMOVE(client, &client->parent->children);
+
+    VEC_FOR_EACH (child, &client->children)
+        (*child)->parent = client->parent;
+
+    VEC_DESTROY(&client->children);
 
     wh_workspace_unbind_client(client);
 
