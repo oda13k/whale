@@ -619,15 +619,18 @@ WhaleSurface* wh_pointer_focus_update()
         return nullptr;
     }
 
+    if (surface != g_pointer.focused_surface &&
+        (g_focus_follows_pointer || !wh_keyboard_get_focused_surface()))
+    {
+        wh_keyboard_focus_surface(surface);
+    }
+
     WhalePosition2D surface_coords = {
         .x = pointer_pos.x - surface->layout_pos.x,
         .y = pointer_pos.y - surface->layout_pos.y
     };
 
     pointer_focus_surface(&surface_coords, surface);
-
-    if (g_config_focus_follows_pointer || !wh_keyboard_get_focused_surface())
-        wh_keyboard_focus_surface(surface);
 
     return g_pointer.focused_surface;
 }
