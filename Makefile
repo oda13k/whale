@@ -31,7 +31,7 @@ CFLAGS    := -MD -MP -std=c23 $(WARNINGS) \
 -DWH_CC_VERSION="\"$(shell ${CC} --version | head -n 1)\"" \
 -DWH_LD_VERSION="\"$(shell ${LD} --version | head -n 1)\""
 
-LDFLAGS   := -lm -lxcb -fuse-ld=$(LD)
+LDFLAGS   := -lm -lxcb -fuse-ld=$(LD) -linput
 
 ifeq ($(BUILD_DEBUG),1)
 	CFLAGS += -g -DWHALE_DEBUG=1

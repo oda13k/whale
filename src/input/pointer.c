@@ -1,4 +1,5 @@
 
+#include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <whale/client/client.h>
 #include <whale/compositor.h>
@@ -11,7 +12,7 @@
 #include <whale/types.h>
 #include <whale/utils/env.h>
 #include <whale/utils/math.h>
-#include <whale/utils/proc.h>
+#include <wlr/backend/libinput.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_pointer.h>
@@ -598,9 +599,51 @@ void wh_pointer_destroy()
     g_seat = nullptr;
 }
 
+static void
+on_pointer_input_device_destroy(struct wl_listener* listener, void* data)
+{
+    struct wlr_input_device* dev = data;
+    wlr_cursor_detach_input_device(g_pointer.wlr_cursor, dev);
+
+    UNLISTEN(listener);
+    free(listener);
+}
+
 int wh_pointer_attach_device(struct wlr_pointer* pointer)
 {
+    pointer->data = calloc(1, sizeof(struct wl_listener));
+    if (!pointer->data)
+    {
+        wh_log(ERR, "pointer: Failed to allocate pointer.");
+        return -1;
+    }
+
+    if (wlr_input_device_is_libinput(&pointer->base))
+    {
+        struct libinput_device* dev =
+            wlr_libinput_get_device_handle(&pointer->base);
+
+        if (libinput_device_has_capability(dev, LIBINPUT_DEVICE_CAP_GESTURE))
+        {
+            if (libinput_device_config_scroll_has_natural_scroll(dev))
+                libinput_device_config_scroll_set_natural_scroll_enabled(
+                    dev, true
+                );
+
+            if (libinput_device_config_tap_get_finger_count(dev))
+                libinput_device_config_tap_set_enabled(dev, true);
+        }
+    }
+
     wlr_cursor_attach_input_device(g_pointer.wlr_cursor, &pointer->base);
+
+    struct wl_listener* destroy_listener = pointer->data;
+    LISTEN(
+        &pointer->base.events.destroy,
+        destroy_listener,
+        on_pointer_input_device_destroy
+    );
+
     return 0;
 }
 
@@ -619,8 +662,9 @@ WhaleSurface* wh_pointer_focus_update()
         return nullptr;
     }
 
-    if (surface != g_pointer.focused_surface &&
-        (g_focus_follows_pointer || !wh_keyboard_get_focused_surface()))
+    if ((surface != g_pointer.focused_surface ||
+         !wh_keyboard_get_focused_surface()) &&
+        g_focus_follows_pointer)
     {
         wh_keyboard_focus_surface(surface);
     }
