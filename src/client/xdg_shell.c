@@ -465,23 +465,6 @@ static void on_xdg_toplevel_set_parent(struct wl_listener* l, void*)
 
     if (xdg_client->toplevel->base->initialized)
         xdg_toplevel_update_wants_floating(xdg_client);
-
-    if (xdg_client->toplevel->parent)
-    {
-        WhaleClient* parent =
-            XDG_CLIENT_FROM_TOPLEVEL(xdg_client->toplevel->parent)->client;
-
-        xdg_client->client->parent = parent;
-        VEC_PUSH(xdg_client->client, &parent->children);
-    }
-    else if (xdg_client->client->parent)
-    {
-        WhaleClient* parent = xdg_client->client->parent;
-
-        WH_ASSERT(VEC_INCLUDES(xdg_client->client, &parent->children));
-        xdg_client->client->parent = nullptr;
-        VEC_REMOVE(xdg_client->client, &parent->children);
-    }
 }
 
 static void on_xdg_toplevel_new(struct wl_listener*, void* data)
