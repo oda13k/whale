@@ -3,6 +3,21 @@
  * Licensed under the MIT license.
  */
 
+/* This parser is not 100% on spec. It does things I want it to do/doesn't do
+ * things I find pointless for my use case. It's based on the 1.0.0 spec and
+ * differs by the following:
+ * Inline tables can span multiple lines (now supported in TOML 1.1.0)
+ * Doesn't support dates/times
+ * Leading zeros are allowed for all bases
+ * Doesn't support +-inf and +-nan (yet?)
+ * Doesn't support scientific notation,
+ * Doesn't support utf8 (yet)
+ * Doesn't support multi-line strings (yet?)
+ * Table redefinitions using dotted keys/headers differs in a way
+ *   that is so esoteric it's not even worth explaining
+ * Probably some other stuff
+ */
+
 #ifndef WHALE_TOML_H
 #define WHALE_TOML_H
 
